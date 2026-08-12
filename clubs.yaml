@@ -1,0 +1,137 @@
+# teetime-watch club registry
+#
+# status: confirmed  = MiClub host verified to exist
+#         candidate  = likely MiClub, needs `python scan.py --discover` to verify
+#         manual     = not on MiClub, book direct (listed for reference only)
+#
+# drive_min is approximate from Nerang/Robina.
+# Set enabled: false on anything you'd never actually play.
+
+clubs:
+  # ---------- confirmed MiClub ----------
+  - name: Palmer Gold Coast
+    host: https://colonialrobina.miclub.com.au
+    booking_resource_id: "3000001"
+    drive_min: 10
+    status: confirmed
+    enabled: true
+
+  - name: Palmer Colonial
+    host: https://colonialrobina.miclub.com.au
+    booking_resource_id: "3000000"
+    drive_min: 10
+    status: confirmed
+    enabled: true
+
+  - name: Parkwood Village
+    host: https://parkwood.miclub.com.au
+    booking_resource_id: "3000000"
+    drive_min: 20
+    status: confirmed
+    enabled: true
+
+  - name: Palm Meadows
+    host: https://palmmeadows.miclub.com.au
+    booking_resource_id: "3000000"
+    drive_min: 12
+    status: confirmed
+    enabled: true
+
+  - name: RACV Royal Pines
+    host: https://royalpines.miclub.com.au
+    booking_resource_id: "3000000"
+    drive_min: 15
+    status: confirmed
+    enabled: true
+
+  - name: Southport Golf Club
+    host: https://southport.miclub.com.au
+    booking_resource_id: null       # discover
+    drive_min: 25
+    status: confirmed
+    enabled: false
+
+  - name: Coolangatta & Tweed Heads
+    host: https://www.cooltweedgolf.com.au
+    booking_resource_id: null
+    drive_min: 35
+    status: confirmed
+    enabled: true
+
+  - name: Meadowbrook
+    host: https://meadowbrook.miclub.com.au
+    booking_resource_id: "3000000"
+    drive_min: 45
+    status: confirmed
+    enabled: true
+
+  # ---------- candidates: run --discover to confirm ----------
+  - name: The Glades
+    host: https://theglades.miclub.com.au
+    booking_resource_id: null
+    drive_min: 10
+    status: confirmed
+    enabled: false
+
+  - name: Surfers Paradise Golf Club
+    host: https://surfersparadise.miclub.com.au
+    booking_resource_id: null
+    drive_min: 15
+    status: confirmed
+    enabled: true
+
+  - name: Arundel Hills
+    host: https://arundelhills.miclub.com.au
+    booking_resource_id: null
+    drive_min: 20
+    status: candidate
+    enabled: false
+
+  - name: Gainsborough Greens
+    host: https://gainsboroughgreens.miclub.com.au
+    booking_resource_id: null
+    drive_min: 35
+    status: candidate
+    enabled: false
+
+  - name: Emerald Lakes
+    host: https://emeraldlakes.miclub.com.au
+    booking_resource_id: null
+    drive_min: 12
+    status: confirmed
+    enabled: true
+
+  - name: Tamborine Mountain
+    host: https://tamborinemountain.miclub.com.au
+    booking_resource_id: null
+    drive_min: 40
+    status: candidate
+    enabled: false
+
+  - name: Murwillumbah (NSW)
+    host: https://murwillumbah.miclub.com.au
+    booking_resource_id: null
+    drive_min: 45
+    status: confirmed
+    enabled: true
+
+  - name: Kingscliff / Cudgen Leisure Land (NSW)
+    host: https://cudgen.miclub.com.au
+    booking_resource_id: null
+    drive_min: 40
+    status: candidate
+    enabled: false
+
+  - name: Windaroo Lakes
+    host: https://windaroolakes.miclub.com.au
+    booking_resource_id: null
+    drive_min: 45
+    status: confirmed
+    enabled: true
+
+  - name: Carbrook
+    host: https://carbrook.miclub.com.au
+    booking_resource_id: null
+    drive_min: 45
+    status: confirmed
+    enabled: true
