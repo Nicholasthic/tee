@@ -69,6 +69,33 @@ Budget note: with ~10 live clubs it's about 4 minutes per run, so roughly 1,400 
 
 ---
 
+## The page
+
+`build.py` scans every club and writes a single self-contained `docs/index.html` — no
+server, no build step, no external requests. All results are embedded as JSON and
+filtered in the browser, so switching days or dragging the time window is instant.
+
+```bash
+python build.py --days 7 --max-drive 45     # scan, then write the page
+python build.py --offline                   # rewrite the page from the last scan
+python build.py --offline --open            # ...and open it
+```
+
+Use `--offline` when you're changing the layout. It re-renders the template against
+the records already embedded in `docs/index.html`, keeps the original scan timestamp,
+and doesn't touch the clubs.
+
+The page groups by day, then by club. Each club gets a timeline of the whole day with
+every open slot marked — clusters and gaps are obvious at a glance — plus the actual
+times as links straight to that club's booking sheet. The red pin is the earliest slot.
+Filters (group size, tee window, max drive, sort) persist in `localStorage`, and the
+theme follows the OS unless you toggle it.
+
+`.github/workflows/build.yml` runs the scan three times a day and commits the page,
+which GitHub Pages serves from `docs/`.
+
+---
+
 ## Notes
 
 - Requests are spaced 1.5s apart. Don't lower that. These are small club servers and the whole point is to stay unremarkable in their logs.

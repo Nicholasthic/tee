@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import date, datetime
@@ -46,6 +47,28 @@ def collect(days: int, max_drive: int, all_fees: bool):
     return openings, problems
 
 
+def _cached_page() -> str:
+    if not OUT_FILE.exists():
+        raise SystemExit("no docs/index.html to reuse — run without --offline first")
+    return OUT_FILE.read_text(encoding="utf-8")
+
+
+def cached_records() -> list[dict]:
+    """Re-read the records embedded in the last built page.
+
+    Lets you iterate on the template without hammering the clubs again.
+    """
+    m = re.search(r"const DATA = (\[.*?\]);", _cached_page(), re.S)
+    if not m:
+        raise SystemExit("could not find embedded data in docs/index.html")
+    return json.loads(m.group(1))
+
+
+def cached_built() -> str:
+    m = re.search(r'const BUILT = "([^"]*)"', _cached_page())
+    return m.group(1) if m else datetime.now().astimezone().isoformat()
+
+
 def to_records(openings) -> list[dict]:
     """One record per club+day+time, with fee options merged."""
     merged: dict[tuple, dict] = {}
@@ -76,246 +99,638 @@ TEMPLATE = """<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f4f1ea">
-<title>Tee</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#f5f3ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#080d0a" media="(prefers-color-scheme: dark)">
+<title>Tee Times</title>
+<script>try{var _t=localStorage.getItem('tee.theme');document.documentElement.dataset.theme=_t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
 <style>
-  :root {
-    --ink:#14161a; --bone:#f4f1ea; --card:#fffdf8;
-    --line:#ded7c8; --moss:#3d5a40; --clay:#a8563c; --muted:#7d766a;
-  }
-  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  html { background:var(--bone); }
-  body {
-    background:var(--bone); color:var(--ink);
-    font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
-    font-size:13px; line-height:1.45;
-    padding:0 0 calc(40px + env(safe-area-inset-bottom));
-    -webkit-font-smoothing:antialiased;
-  }
-  .wrap { max-width:620px; margin:0 auto; padding:0 18px; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-  header { padding:32px 0 0; }
-  h1 {
-    font-family:'Instrument Serif',Georgia,serif;
-    font-size:52px; font-weight:400; line-height:.92; letter-spacing:-.01em;
+  /* Palette borrowed from the course itself: fairway green, bunker sand,
+     clubhouse paper, and a flag red used sparingly for the pick of the day. */
+  :root{
+    --bg:#f4f2ea; --surface:#fffefa; --surface2:#eceadd; --raise:#fffefa;
+    --border:#e1ddcc; --border2:#c6bfa8;
+    --text:#101711; --dim:#69705f; --faint:#989b88;
+    --accent:#14653f; --accent-ink:#fbfdf8; --accent-bg:#e3efe4; --accent-line:#b2d2bb;
+    --sand:#b98f3e; --sand-bg:#f6ecd6; --sand-line:#e4cf9f;
+    --flag:#b6432f;
+    --mow:rgba(20,101,63,.05);
+    --dawn:rgba(214,158,74,.13); --dusk:rgba(58,84,132,.1);
+    --shadow:0 1px 2px rgba(30,34,20,.05), 0 12px 28px -20px rgba(30,34,20,.45);
+    --radius:14px;
+    color-scheme:light;
   }
-  h1 em { font-style:italic; color:var(--moss); }
-  .stamp {
-    font-size:10px; letter-spacing:.16em; text-transform:uppercase;
-    color:var(--muted); margin-top:12px;
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#080d0a; --surface:#0f1611; --surface2:#161f18; --raise:#212c24;
+      --border:#1e2a21; --border2:#33443a;
+      --text:#e9eee6; --dim:#8b968a; --faint:#6a7568;
+      --accent:#4bd486; --accent-ink:#04170d; --accent-bg:#0f2a1c; --accent-line:#1d4632;
+      --sand:#d6b06a; --sand-bg:#241d10; --sand-line:#43351d;
+      --flag:#e2755d;
+      --mow:rgba(75,212,134,.038);
+      --dawn:rgba(214,176,106,.075); --dusk:rgba(96,124,180,.085);
+      --shadow:0 1px 2px rgba(0,0,0,.45), 0 14px 34px -22px rgba(0,0,0,.95);
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#080d0a; --surface:#0f1611; --surface2:#161f18; --raise:#212c24;
+    --border:#1e2a21; --border2:#33443a;
+    --text:#e9eee6; --dim:#8b968a; --faint:#6a7568;
+    --accent:#4bd486; --accent-ink:#04170d; --accent-bg:#0f2a1c; --accent-line:#1d4632;
+    --sand:#d6b06a; --sand-bg:#241d10; --sand-line:#43351d;
+    --flag:#e2755d;
+    --mow:rgba(75,212,134,.038);
+    --dawn:rgba(214,176,106,.075); --dusk:rgba(96,124,180,.085);
+    --shadow:0 1px 2px rgba(0,0,0,.45), 0 14px 34px -22px rgba(0,0,0,.95);
+    color-scheme:dark;
   }
 
-  /* signature element: the ruled scorecard bar under the masthead */
-  .rule { display:flex; gap:3px; margin:16px 0 0; }
-  .rule span { height:6px; flex:1; border:1px solid var(--ink); border-bottom:none; }
-  .rule span:nth-child(4n) { background:var(--ink); }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+    padding-bottom:calc(40px + env(safe-area-inset-bottom));
+  }
+  .inner{max-width:1180px; margin:0 auto; padding:0 16px}
+  @media (min-width:900px){ .inner{padding:0 28px} }
+  svg{display:block}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important} }
 
-  .controls {
-    position:sticky; top:0; z-index:10;
-    background:var(--bone); border-bottom:1px solid var(--ink);
-    padding:14px 0 12px; margin-bottom:6px;
+  /* ---- masthead ---- */
+  .bar{padding:18px 0 12px}
+  .bar .inner{display:flex; align-items:center; justify-content:space-between; gap:14px}
+  .brand{display:flex; align-items:center; gap:11px; min-width:0}
+  .mark{
+    width:36px; height:36px; flex:none; border-radius:11px;
+    background:var(--accent); color:var(--accent-ink);
+    display:grid; place-items:center;
   }
-  .strip { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; }
-  .strip::-webkit-scrollbar { display:none; }
-  .strip + .strip { margin-top:8px; }
-  button {
-    font:inherit; font-size:11px; letter-spacing:.04em;
-    background:transparent; color:var(--muted);
-    border:1px solid var(--line); border-radius:0;
-    padding:7px 11px; white-space:nowrap; cursor:pointer;
-    transition:none;
-  }
-  button.on { background:var(--ink); color:var(--bone); border-color:var(--ink); }
-  button .n { opacity:.55; margin-left:5px; }
+  .mark svg{width:20px; height:20px; fill:none; stroke:currentColor;
+            stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round}
+  .mark .fl{fill:var(--flag); stroke:var(--flag); stroke-width:1.4}
 
-  .day-h {
-    font-family:'Instrument Serif',Georgia,serif;
-    font-size:24px; font-weight:400;
-    margin:30px 0 0; padding-bottom:6px;
-    border-bottom:1px solid var(--line);
-    display:flex; justify-content:space-between; align-items:baseline;
+  /* a mown strip of fairway between the masthead and the filters */
+  .turf{height:7px; background-color:var(--accent);
+    background-image:repeating-linear-gradient(90deg,
+      rgba(255,255,255,.16) 0 26px, transparent 26px 52px)}
+  h1{font-size:19px; font-weight:650; letter-spacing:-.025em; line-height:1.2}
+  .sub{font-size:11.5px; color:var(--dim); margin-top:1px}
+  .icon{
+    width:36px; height:36px; flex:none; border-radius:11px; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface); color:var(--dim);
+    display:grid; place-items:center;
   }
-  .day-h .c { font-family:'IBM Plex Mono',monospace; font-size:10px;
-              color:var(--muted); letter-spacing:.12em; }
+  .icon svg{width:17px; height:17px; fill:none; stroke:currentColor;
+            stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+  .icon:hover{color:var(--text); border-color:var(--border2)}
+  :root[data-theme="dark"] .i-moon, .i-sun{display:none}
+  :root[data-theme="dark"] .i-sun{display:block}
 
-  a.club {
-    display:block; text-decoration:none; color:inherit;
-    background:var(--card); border:1px solid var(--line); border-top:none;
-    padding:15px 15px 17px;
+  /* ---- filters ---- */
+  .filters{
+    position:sticky; top:0; z-index:20;
+    background:var(--bg); border-bottom:1px solid var(--border);
+    padding:10px 0 12px;
   }
-  a.club:first-of-type { border-top:1px solid var(--line); }
-  a.club:active { background:#f7f2e6; }
-  .top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
-  .name { font-size:15px; font-weight:500; letter-spacing:-.01em; }
-  .drive { font-size:10px; color:var(--muted); letter-spacing:.08em; white-space:nowrap; }
-  .fees { font-size:10.5px; color:var(--muted); margin:3px 0 10px; }
-  .times { display:flex; flex-wrap:wrap; gap:4px; }
-  .t {
-    border:1px solid var(--line); background:var(--bone);
-    padding:4px 8px; font-size:11px; letter-spacing:.02em;
+  @supports (backdrop-filter:blur(1px)){
+    .filters{background:color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter:blur(12px)}
   }
-  .t.first { border-color:var(--moss); color:var(--moss); font-weight:500; }
-  .more { font-size:10.5px; color:var(--muted); padding:4px 2px; align-self:center; }
+  .days{display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; padding-bottom:1px}
+  .days::-webkit-scrollbar{display:none}
+  .day{
+    flex:none; min-width:62px; font:inherit; cursor:pointer; text-align:center;
+    border:1px solid var(--border); background:var(--surface); color:var(--text);
+    border-radius:11px; padding:6px 10px 7px; line-height:1.2;
+    transition:background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .day .dw{font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--dim)}
+  .day .dn{font-size:15px; font-weight:650; letter-spacing:-.02em; margin-top:1px;
+           font-variant-numeric:tabular-nums}
+  .day .dc{font-size:10px; color:var(--faint); font-variant-numeric:tabular-nums}
+  .day[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .day[aria-pressed="true"] .dw,
+  .day[aria-pressed="true"] .dc{color:var(--accent-ink); opacity:.7}
+  .day.zero{opacity:.42}
 
-  .empty {
-    color:var(--muted); padding:56px 4px; font-size:12.5px;
-    border-top:1px solid var(--line); margin-top:8px;
+  .ftoggle{
+    display:none; margin-top:10px; width:100%; font:inherit; font-size:12.5px; font-weight:600;
+    border:1px solid var(--border); background:var(--surface); color:var(--text);
+    border-radius:10px; padding:8px 12px; cursor:pointer;
+    align-items:center; justify-content:center; gap:7px;
   }
-  .empty b { display:block; font-family:'Instrument Serif',serif;
-             font-size:20px; color:var(--ink); font-weight:400; margin-bottom:6px; }
-  footer {
-    margin-top:44px; padding-top:14px; border-top:1px solid var(--line);
-    font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+  .ftoggle .badge{
+    background:var(--accent); color:var(--accent-ink); border-radius:999px;
+    font-size:10.5px; font-weight:700; padding:1px 6px; font-variant-numeric:tabular-nums;
   }
-  @media (min-width:560px) { h1 { font-size:64px; } }
+  .row{display:flex; gap:20px; align-items:flex-end; margin-top:12px; flex-wrap:wrap}
+  @media (max-width:899px){
+    .ftoggle{display:flex}
+    .row{display:none; flex-direction:column; align-items:stretch; gap:15px; margin-top:14px}
+    .row.open{display:flex}
+  }
+  .ctl{display:flex; flex-direction:column; gap:7px; min-width:0}
+  .ctl.grow{flex:1; min-width:180px}
+  .ctl > span{
+    font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--faint);
+    display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  }
+  .ctl > span b{
+    color:var(--text); font-weight:600; font-size:12px;
+    letter-spacing:0; text-transform:none; font-variant-numeric:tabular-nums;
+  }
+
+  .seg{display:flex; gap:2px; padding:2px; border-radius:10px;
+       background:var(--surface2); border:1px solid var(--border)}
+  .seg button{
+    flex:1; font:inherit; font-size:12.5px; font-weight:550; cursor:pointer;
+    border:0; background:transparent; color:var(--dim); border-radius:8px;
+    padding:5px 9px; white-space:nowrap;
+  }
+  .seg button[aria-pressed="true"]{background:var(--raise); color:var(--text);
+                                   box-shadow:0 1px 2px rgba(0,0,0,.09)}
+
+  .slider{position:relative; height:20px}
+  .slider .trk{position:absolute; inset:8px 0 auto; height:4px; border-radius:99px; background:var(--border2)}
+  .slider .fill{position:absolute; top:8px; height:4px; border-radius:99px; background:var(--accent)}
+  .slider input{
+    position:absolute; left:0; top:0; width:100%; height:20px; margin:0;
+    -webkit-appearance:none; appearance:none; background:none; pointer-events:none;
+  }
+  .slider input::-webkit-slider-runnable-track{height:4px; background:transparent}
+  .slider input::-webkit-slider-thumb{
+    -webkit-appearance:none; pointer-events:auto; cursor:pointer;
+    width:16px; height:16px; margin-top:-6px; border-radius:50%;
+    background:var(--raise); border:2px solid var(--accent);
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+  }
+  .slider input::-moz-range-track{height:4px; background:transparent}
+  .slider input::-moz-range-thumb{
+    pointer-events:auto; cursor:pointer;
+    width:14px; height:14px; border-radius:50%;
+    background:var(--raise); border:2px solid var(--accent);
+  }
+
+  /* ---- results ---- */
+  .stats{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+         margin:22px 0 2px; font-size:12.5px; color:var(--dim)}
+  .stats b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
+  .reset{margin-left:auto; font:inherit; font-size:12px; font-weight:550;
+         background:none; border:0; color:var(--accent); cursor:pointer; padding:3px 0}
+
+  .dayhead{display:flex; align-items:center; gap:12px; margin:26px 0 12px}
+  .dayhead h2{font-size:14px; font-weight:650; letter-spacing:-.015em; white-space:nowrap}
+  .dayhead .ln{flex:1; height:1px; background:var(--border)}
+  .dayhead .cnt{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums;
+                white-space:nowrap}
+
+  .grid{display:grid; gap:12px; grid-template-columns:1fr}
+  @media (min-width:680px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (min-width:1040px){ .grid{grid-template-columns:repeat(3,1fr)} }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:13px 14px 12px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; gap:10px;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  @media (hover:hover){ .card:hover{border-color:var(--accent-line)} }
+  .chead{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+  /* min-width:0 so the nowrap fee line can ellipsis instead of widening the card */
+  .cinfo{min-width:0}
+  .cname{display:block; font-size:14.5px; font-weight:650; letter-spacing:-.015em;
+         line-height:1.25; color:inherit; text-decoration:none}
+  .cname:hover{color:var(--accent)}
+  .cmeta{font-size:11.5px; color:var(--dim); margin-top:2px; font-variant-numeric:tabular-nums}
+  .fees{font-size:10.5px; color:var(--faint); margin-top:2px;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .drive{
+    flex:none; font-size:11px; font-weight:600; white-space:nowrap;
+    color:var(--dim); background:var(--surface2); border:1px solid var(--border);
+    border-radius:999px; padding:3px 8px; font-variant-numeric:tabular-nums;
+  }
+  .drive.near{color:var(--accent); background:var(--accent-bg); border-color:var(--accent-line)}
+
+  /* The timeline is the fairway: mown stripes across the day, warm at dawn,
+     cool at dusk, with each open slot standing up out of the grass. */
+  .tl{position:relative; height:30px; border-radius:8px; overflow:hidden;
+      background:var(--surface2); border:1px solid var(--border)}
+  .tl::before{
+    content:""; position:absolute; inset:0;
+    background:
+      linear-gradient(90deg, var(--dawn), transparent 34%, transparent 62%, var(--dusk)),
+      repeating-linear-gradient(90deg, var(--mow) 0 22px, transparent 22px 44px);
+  }
+  .tl .hr{position:absolute; top:0; bottom:0; width:1px; background:var(--border)}
+  .tl .m{position:absolute; top:5px; bottom:5px; width:3px; border-radius:2px;
+         background:var(--accent); transform:translateX(-1.5px)}
+  .tl .m.pin{background:var(--flag); top:3px; box-shadow:0 0 0 2px var(--surface2)}
+  .axis{position:relative; height:11px; margin-top:3px; overflow:hidden}
+  .axis span{position:absolute; top:0; font-size:9.5px; color:var(--faint);
+             transform:translateX(-50%); white-space:nowrap; letter-spacing:.03em}
+
+  .times{display:flex; flex-wrap:wrap; gap:5px}
+  .t{
+    transition:border-color .12s ease, color .12s ease, background .12s ease;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px; text-decoration:none; color:var(--text);
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:7px; padding:4px 7px; white-space:nowrap; font-variant-numeric:tabular-nums;
+  }
+  .t:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-bg)}
+  .t.hot{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600}
+  .t.hot:hover{background:var(--accent); color:var(--accent-ink); opacity:.88}
+  .more{
+    font:inherit; font-size:11.5px; font-weight:550; cursor:pointer;
+    color:var(--sand); background:var(--sand-bg);
+    border:1px solid var(--sand-line); border-radius:7px; padding:4px 8px;
+  }
+  .more:hover{border-color:var(--sand)}
+
+  .empty{
+    text-align:center; padding:60px 20px; margin-top:22px;
+    border:1px dashed var(--border2); border-radius:var(--radius);
+  }
+  .empty h3{font-size:16px; font-weight:650; letter-spacing:-.02em; margin-bottom:6px}
+  .empty p{color:var(--dim); font-size:13px; max-width:330px; margin:0 auto 16px}
+  .btn{
+    font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); border:0;
+    border-radius:10px; padding:9px 16px;
+  }
+
+  footer{
+    margin-top:40px; padding-top:16px; border-top:1px solid var(--border);
+    font-size:11px; color:var(--faint);
+    display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
 </style>
 </head><body>
-<div class="wrap">
-  <header>
-    <h1>Tee<br><em>times</em></h1>
-    <div class="rule">__RULE__</div>
-    <div class="stamp">__STAMP__ · __NCLUB__ clubs · within __DRIVE__ min</div>
-  </header>
 
-  <div class="controls">
-    <div class="strip" id="days"></div>
-    <div class="strip" id="opts"></div>
+<header class="bar"><div class="inner">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24">
+      <path class="fl" d="M8.6 2.8 17.4 6.4 8.6 10Z"/>
+      <path d="M8.6 18.4V2.4"/><circle cx="8.6" cy="20.4" r="2"/>
+    </svg></div>
+    <div>
+      <h1>Tee Times</h1>
+      <div class="sub" id="sub">__NCLUB__ clubs within __DRIVE__ min</div>
+    </div>
   </div>
+  <button class="icon" id="theme" title="Toggle theme" aria-label="Toggle theme">
+    <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg>
+    <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+</div></header>
+<div class="turf"></div>
 
+<section class="filters"><div class="inner">
+  <div class="days" id="days"></div>
+
+  <button class="ftoggle" id="ftoggle" aria-expanded="false">
+    <span>Filters</span><span class="badge" id="fcount" hidden></span>
+  </button>
+
+  <div class="row" id="row">
+    <div class="ctl">
+      <span>Group size</span>
+      <div class="seg" id="players"></div>
+    </div>
+    <div class="ctl grow">
+      <span>Tee window <b id="tLabel"></b></span>
+      <div class="slider" id="tSlider">
+        <div class="trk"></div><div class="fill" id="tFill"></div>
+        <input type="range" id="tMin"><input type="range" id="tMax">
+      </div>
+    </div>
+    <div class="ctl grow">
+      <span>Max drive <b id="dLabel"></b></span>
+      <div class="slider" id="dSlider">
+        <div class="trk"></div><div class="fill" id="dFill"></div>
+        <input type="range" id="drive">
+      </div>
+    </div>
+    <div class="ctl">
+      <span>Sort by</span>
+      <div class="seg" id="sort"></div>
+    </div>
+  </div>
+</div></section>
+
+<main class="inner">
+  <div class="stats" id="stats"></div>
   <div id="list"></div>
-
-  <footer>Tap a club to book · MiClub public sheets</footer>
-</div>
+  <footer>
+    <span>Public MiClub timesheets · tap a time to book</span>
+    <span id="built"></span>
+  </footer>
+</main>
 
 <script>
 const DATA = __DATA__;
+const BUILT = "__BUILT__";
 
-const state = { day: 'all', when: 'all', players: 4, drive: 99 };
+/* ---------- helpers ---------- */
+const ENT = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc = s => String(s).replace(/[&<>"']/g, c => ENT[c]);
+const mins = t => (+t.slice(0,2)) * 60 + (+t.slice(3,5));
+const pad2 = n => (n < 10 ? '0' : '') + n;
 
-const fmt = t => {
-  const h = +t.slice(0,2), m = t.slice(3);
-  const s = h < 12 ? 'am' : 'pm';
-  return ((h % 12) || 12) + ':' + m + s;
-};
-const dayLabel = iso => {
+function clock(v){
+  const h = Math.floor(v / 60), m = v % 60;
+  return ((h % 12) || 12) + ':' + pad2(m) + (h < 12 ? 'am' : 'pm');
+}
+function clockShort(v){
+  const h = Math.floor(v / 60), m = v % 60;
+  return ((h % 12) || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
+}
+function dayDiff(iso){
   const d = new Date(iso + 'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-  const diff = Math.round((d - today) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tmrw';
-  return d.toLocaleDateString('en-AU', { weekday:'short' });
-};
-const dayFull = iso => {
-  const d = new Date(iso + 'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-  const diff = Math.round((d - today) / 86400000);
-  const nice = d.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
-  if (diff === 0) return 'Today · ' + nice;
-  if (diff === 1) return 'Tomorrow · ' + nice;
-  return nice;
-};
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((d - t) / 86400000);
+}
+function ago(iso){
+  const t = new Date(iso);
+  if (isNaN(t)) return '';
+  const s = (Date.now() - t) / 1000;
+  if (s < 90) return 'updated just now';
+  if (s < 5400) return 'updated ' + Math.round(s / 60) + ' min ago';
+  if (s < 86400) return 'updated ' + Math.round(s / 3600) + ' hr ago';
+  return 'updated ' + t.toLocaleDateString('en-AU', { day:'numeric', month:'short' });
+}
+const groupBy = (rows, fn) => rows.reduce((acc, r) => {
+  (acc[fn(r)] = acc[fn(r)] || []).push(r); return acc;
+}, {});
 
-function matches(r) {
-  if (state.day !== 'all' && r.day !== state.day) return false;
+/* ---------- bounds derived from the data ---------- */
+const ALL_DAYS = [...new Set(DATA.map(r => r.day))].sort();
+const T_LO = DATA.length ? Math.floor(Math.min(...DATA.map(r => mins(r.time))) / 30) * 30 : 360;
+const T_HI = DATA.length ? Math.ceil(Math.max(...DATA.map(r => mins(r.time))) / 30) * 30 : 1080;
+const D_LO = DATA.length ? Math.max(5, Math.floor(Math.min(...DATA.map(r => r.drive)) / 5) * 5) : 5;
+const D_HI = DATA.length ? Math.ceil(Math.max(...DATA.map(r => r.drive)) / 5) * 5 : 60;
+const SPAN = Math.max(1, T_HI - T_LO);
+const PLAYERS = [1, 2, 3, 4];
+const SORTS = [['time','Earliest'], ['drive','Closest'], ['count','Most open']];
+const CHIP_LIMIT = 8;
+
+const DEFAULTS = { day:'all', players:4, tmin:T_LO, tmax:T_HI, drive:D_HI, sort:'time' };
+const state = Object.assign({}, DEFAULTS, restore());
+const expanded = new Set();
+
+function restore(){
+  try {
+    const s = JSON.parse(localStorage.getItem('tee.filters') || '{}');
+    const out = {};
+    if (s.day === 'all' || ALL_DAYS.indexOf(s.day) > -1) out.day = s.day;
+    if (PLAYERS.indexOf(s.players) > -1) out.players = s.players;
+    if (SORTS.some(x => x[0] === s.sort)) out.sort = s.sort;
+    if (typeof s.tmin === 'number') out.tmin = Math.min(Math.max(s.tmin, T_LO), T_HI);
+    if (typeof s.tmax === 'number') out.tmax = Math.min(Math.max(s.tmax, T_LO), T_HI);
+    if (out.tmin > out.tmax) { delete out.tmin; delete out.tmax; }
+    if (typeof s.drive === 'number') out.drive = Math.min(Math.max(s.drive, D_LO), D_HI);
+    return out;
+  } catch (e) { return {}; }
+}
+const save = () => { try { localStorage.setItem('tee.filters', JSON.stringify(state)); } catch (e) {} };
+
+/* ---------- filtering ---------- */
+function matches(r, ignoreDay){
+  if (!ignoreDay && state.day !== 'all' && r.day !== state.day) return false;
   if (r.free < state.players) return false;
   if (r.drive > state.drive) return false;
-  const h = +r.time.slice(0,2);
-  if (state.when === 'early' && h >= 9) return false;
-  if (state.when === 'mid' && (h < 9 || h >= 13)) return false;
-  if (state.when === 'late' && h < 13) return false;
-  return true;
+  const m = mins(r.time);
+  return m >= state.tmin && m <= state.tmax;
 }
+const activeCount = () =>
+  (state.day !== DEFAULTS.day ? 1 : 0) + (state.players !== DEFAULTS.players ? 1 : 0) +
+  (state.tmin !== DEFAULTS.tmin || state.tmax !== DEFAULTS.tmax ? 1 : 0) +
+  (state.drive !== DEFAULTS.drive ? 1 : 0) + (state.sort !== DEFAULTS.sort ? 1 : 0);
 
-function chip(label, on, count, fn) {
-  const b = document.createElement('button');
-  b.className = on ? 'on' : '';
-  b.innerHTML = label + (count !== null ? ' <span class="n">' + count + '</span>' : '');
-  b.onclick = fn;
-  return b;
-}
+/* ---------- static bits of the timeline ---------- */
+const pct = v => ((v - T_LO) / SPAN) * 100;
+const TICKS = [];
+for (let v = Math.ceil(T_LO / 180) * 180; v < T_HI; v += 180) TICKS.push(v);
+const GRID = TICKS.map(v => '<i class="hr" style="left:' + pct(v).toFixed(2) + '%"></i>').join('');
+const AXIS = TICKS.filter(v => pct(v) > 7 && pct(v) < 93)
+  .map(v => '<span style="left:' + pct(v).toFixed(2) + '%">' + clockShort(v) + '</span>').join('');
 
-function countFor(patch) {
-  const saved = { ...state };
-  Object.assign(state, patch);
-  const n = new Set(DATA.filter(matches).map(r => r.club + r.day + r.time)).size;
-  Object.assign(state, saved);
-  return n;
-}
-
-function render() {
-  // day strip
-  const days = [...new Set(DATA.map(r => r.day))].sort();
-  const ds = document.getElementById('days');
-  ds.innerHTML = '';
-  ds.appendChild(chip('All', state.day === 'all', countFor({ day:'all' }),
-    () => { state.day = 'all'; render(); }));
-  days.forEach(d => ds.appendChild(chip(dayLabel(d), state.day === d, countFor({ day:d }),
-    () => { state.day = d; render(); })));
-
-  // options strip
-  const os = document.getElementById('opts');
-  os.innerHTML = '';
-  [['all','Any time'],['early','Before 9'],['mid','9–1'],['late','After 1']].forEach(([k,l]) =>
-    os.appendChild(chip(l, state.when === k, null, () => { state.when = k; render(); })));
-  os.appendChild(chip(state.players === 4 ? '4-ball' : state.players + ' players',
-    state.players === 4, null,
-    () => { state.players = state.players === 4 ? 2 : 4; render(); }));
-  os.appendChild(chip(state.drive === 99 ? 'Any drive' : '≤' + state.drive + 'min',
-    state.drive !== 99, null,
-    () => { state.drive = state.drive === 99 ? 20 : 99; render(); }));
-
-  // list
-  const rows = DATA.filter(matches);
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-
-  if (!rows.length) {
-    list.innerHTML = '<div class="empty"><b>Nothing open.</b>' +
-      'Try a wider time window, or drop to 2 players.</div>';
-    return;
-  }
-
-  const byDay = {};
-  rows.forEach(r => (byDay[r.day] = byDay[r.day] || []).push(r));
-
-  Object.keys(byDay).sort().forEach(day => {
-    const byClub = {};
-    byDay[day].forEach(r => (byClub[r.club] = byClub[r.club] || []).push(r));
-
-    const groups = Object.values(byClub)
-      .sort((a,b) => a[0].time.localeCompare(b[0].time) || a[0].drive - b[0].drive);
-
-    const h = document.createElement('div');
-    h.className = 'day-h';
-    h.innerHTML = '<span>' + dayFull(day) + '</span><span class="c">' +
-                  byDay[day].length + '</span>';
-    list.appendChild(h);
-
-    groups.forEach(g => {
-      g.sort((a,b) => a.time.localeCompare(b.time));
-      const fees = [...new Set(g.flatMap(r => r.fees))];
-      const a = document.createElement('a');
-      a.className = 'club';
-      a.href = g[0].url; a.target = '_blank'; a.rel = 'noopener';
-      const chips = g.slice(0,16).map((r,i) =>
-        '<span class="t' + (i === 0 ? ' first' : '') + '">' + fmt(r.time) + '</span>').join('');
-      const more = g.length > 16 ? '<span class="more">+' + (g.length-16) + '</span>' : '';
-      a.innerHTML =
-        '<div class="top"><span class="name">' + g[0].club + '</span>' +
-        '<span class="drive">' + g[0].drive + ' min</span></div>' +
-        '<div class="fees">' + fees.slice(0,2).join(' · ') +
-        (fees.length > 2 ? ' · +' + (fees.length-2) : '') + '</div>' +
-        '<div class="times">' + chips + more + '</div>';
-      list.appendChild(a);
-    });
+/* ---------- controls ---------- */
+function buildSeg(el, items, get, set){
+  el.innerHTML = '';
+  items.forEach(([val, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(get() === val));
+    b.onclick = () => { set(val); render(); };
+    el.appendChild(b);
   });
 }
 
+const $ = id => document.getElementById(id);
+const tMin = $('tMin'), tMax = $('tMax'), drive = $('drive');
+
+[tMin, tMax].forEach(el => { el.min = T_LO; el.max = T_HI; el.step = 15; });
+drive.min = D_LO; drive.max = D_HI; drive.step = 5;
+
+tMin.oninput = () => {
+  state.tmin = Math.min(+tMin.value, state.tmax - 15);
+  tMin.value = state.tmin; render();
+};
+tMax.oninput = () => {
+  state.tmax = Math.max(+tMax.value, state.tmin + 15);
+  tMax.value = state.tmax; render();
+};
+drive.oninput = () => { state.drive = +drive.value; render(); };
+
+$('theme').onclick = () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('tee.theme', next); } catch (e) {}
+};
+
+$('ftoggle').onclick = function(){
+  const open = $('row').classList.toggle('open');
+  this.setAttribute('aria-expanded', String(open));
+};
+
+$('list').onclick = e => {
+  const b = e.target.closest('.more');
+  if (!b) return;
+  const k = b.dataset.k;
+  expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+  render();
+};
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const seq = ['all'].concat(ALL_DAYS);
+  const i = seq.indexOf(state.day);
+  const j = i + (e.key === 'ArrowRight' ? 1 : -1);
+  if (j < 0 || j >= seq.length) return;
+  e.preventDefault();
+  state.day = seq[j];
+  render();
+});
+
+function reset(){
+  Object.assign(state, DEFAULTS);
+  expanded.clear();
+  render();
+}
+
+/* ---------- render ---------- */
+function syncControls(){
+  buildSeg($('players'), PLAYERS.map(n => [n, String(n)]),
+    () => state.players, v => { state.players = v; });
+  buildSeg($('sort'), SORTS, () => state.sort, v => { state.sort = v; });
+
+  tMin.value = state.tmin; tMax.value = state.tmax; drive.value = state.drive;
+  $('tFill').style.left = pct(state.tmin) + '%';
+  $('tFill').style.width = (pct(state.tmax) - pct(state.tmin)) + '%';
+  $('dFill').style.width = ((state.drive - D_LO) / Math.max(1, D_HI - D_LO)) * 100 + '%';
+  $('tLabel').textContent = (state.tmin === T_LO && state.tmax === T_HI)
+    ? 'any' : clockShort(state.tmin) + ' – ' + clockShort(state.tmax);
+  $('dLabel').textContent = state.drive >= D_HI ? 'any' : 'under ' + state.drive + ' min';
+
+  const n = activeCount();
+  const badge = $('fcount');
+  badge.hidden = !n;
+  badge.textContent = n;
+}
+
+function renderDays(){
+  const el = $('days');
+  el.innerHTML = '';
+  const total = DATA.filter(r => matches(r, true)).length;
+
+  const pill = (value, top, big, count) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'day' + (count ? '' : ' zero');
+    b.setAttribute('aria-pressed', String(state.day === value));
+    b.innerHTML = '<div class="dw">' + top + '</div><div class="dn">' + big +
+                  '</div><div class="dc">' + count + '</div>';
+    b.onclick = () => { state.day = value; render(); };
+    return b;
+  };
+
+  el.appendChild(pill('all', 'Next', ALL_DAYS.length + 'd', total));
+  ALL_DAYS.forEach(d => {
+    const diff = dayDiff(d);
+    const date = new Date(d + 'T00:00:00');
+    const top = diff === 0 ? 'Today' : diff === 1 ? 'Tmrw'
+      : date.toLocaleDateString('en-AU', { weekday:'short' });
+    const count = DATA.filter(r => r.day === d && matches(r, true)).length;
+    el.appendChild(pill(d, top, String(date.getDate()), count));
+  });
+}
+
+function card(day, club, g){
+  g.sort((a, b) => a.time.localeCompare(b.time));
+  const key = day + '|' + club;
+  const open = expanded.has(key);
+  const shown = open ? g : g.slice(0, CHIP_LIMIT);
+  const fees = [...new Set(g.flatMap(r => r.fees))];
+  const seats = Math.max(...g.map(r => r.free));
+
+  // Height of the grass = how many spots are free; the pin marks the earliest.
+  const marks = g.map((r, i) => {
+    const o = r.free >= 4 ? 1 : r.free === 3 ? .7 : r.free === 2 ? .48 : .3;
+    return '<i class="m' + (i === 0 ? ' pin' : '') + '" style="left:' +
+      pct(mins(r.time)).toFixed(2) + '%;opacity:' + (i === 0 ? 1 : o) + '"></i>';
+  }).join('');
+
+  const chips = shown.map((r, i) =>
+    '<a class="t' + (i === 0 ? ' hot' : '') + '" href="' + esc(r.url) + '" target="_blank" rel="noopener"' +
+    ' title="' + r.free + (r.free === 1 ? ' spot' : ' spots') + ' open">' + clock(mins(r.time)) + '</a>'
+  ).join('');
+
+  const more = g.length > CHIP_LIMIT
+    ? '<button class="more" data-k="' + esc(key) + '">' +
+      (open ? 'Show less' : '+' + (g.length - CHIP_LIMIT) + ' more') + '</button>'
+    : '';
+
+  return '<article class="card">' +
+    '<div class="chead"><div class="cinfo">' +
+      '<a class="cname" href="' + esc(g[0].url) + '" target="_blank" rel="noopener">' + esc(club) + '</a>' +
+      '<div class="cmeta">' + g.length + (g.length === 1 ? ' time' : ' times') +
+        ' · from ' + clock(mins(g[0].time)) + ' · up to ' + seats + ' players</div>' +
+      '<div class="fees">' + esc(fees.slice(0, 2).join(' · ')) +
+        (fees.length > 2 ? ' +' + (fees.length - 2) : '') + '</div>' +
+    '</div>' +
+    '<span class="drive' + (g[0].drive <= 20 ? ' near' : '') + '">' + g[0].drive + ' min</span></div>' +
+    '<div><div class="tl">' + GRID + marks + '</div><div class="axis">' + AXIS + '</div></div>' +
+    '<div class="times">' + chips + more + '</div>' +
+  '</article>';
+}
+
+function renderList(){
+  const rows = DATA.filter(r => matches(r));
+  const list = $('list');
+  const stats = $('stats');
+
+  if (!rows.length){
+    stats.innerHTML = '';
+    list.innerHTML = '<div class="empty"><h3>Nothing open</h3>' +
+      '<p>No tee times match these filters. Widen the window, allow a longer drive, ' +
+      'or drop the group size.</p><button class="btn" id="clr">Clear filters</button></div>';
+    $('clr').onclick = reset;
+    return;
+  }
+
+  const clubs = new Set(rows.map(r => r.club)).size;
+  const earliest = rows.reduce((a, r) => mins(r.time) < mins(a.time) ? r : a).time;
+  stats.innerHTML = '<span><b>' + rows.length.toLocaleString() + '</b> tee times · <b>' +
+    clubs + '</b> clubs · earliest <b>' + clock(mins(earliest)) + '</b></span>' +
+    (activeCount() ? '<button class="reset" id="rst">Clear filters</button>' : '');
+  if (activeCount()) $('rst').onclick = reset;
+
+  const byDay = groupBy(rows, r => r.day);
+  let html = '';
+
+  Object.keys(byDay).sort().forEach(day => {
+    const groups = Object.entries(groupBy(byDay[day], r => r.club));
+    groups.sort((a, b) => {
+      if (state.sort === 'drive') return a[1][0].drive - b[1][0].drive ||
+        a[1][0].time.localeCompare(b[1][0].time);
+      if (state.sort === 'count') return b[1].length - a[1].length ||
+        a[1][0].time.localeCompare(b[1][0].time);
+      const at = Math.min(...a[1].map(r => mins(r.time)));
+      const bt = Math.min(...b[1].map(r => mins(r.time)));
+      return at - bt || a[1][0].drive - b[1][0].drive;
+    });
+
+    const diff = dayDiff(day);
+    const nice = new Date(day + 'T00:00:00')
+      .toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long' });
+    const label = diff === 0 ? 'Today · ' + nice : diff === 1 ? 'Tomorrow · ' + nice : nice;
+
+    html += '<div class="dayhead"><h2>' + label + '</h2><div class="ln"></div>' +
+            '<span class="cnt">' + byDay[day].length + ' across ' + groups.length +
+            (groups.length === 1 ? ' club' : ' clubs') + '</span></div>' +
+            '<div class="grid">' + groups.map(([club, g]) => card(day, club, g)).join('') + '</div>';
+  });
+
+  list.innerHTML = html;
+}
+
+function render(){
+  syncControls();
+  renderDays();
+  renderList();
+  save();
+}
+
+$('built').textContent = ago(BUILT);
 render();
 </script>
 </body></html>
@@ -328,23 +743,30 @@ def main() -> int:
     p.add_argument("--max-drive", type=int, default=45)
     p.add_argument("--all-fees", action="store_true")
     p.add_argument("--open", action="store_true")
+    p.add_argument("--offline", action="store_true",
+                   help="rebuild the page from the last scan instead of hitting the clubs")
     args = p.parse_args()
 
-    openings, problems = collect(args.days, args.max_drive, args.all_fees)
-    for msg in problems:
-        print(f"  ! {msg}", file=sys.stderr)
+    if args.offline:
+        records = cached_records()
+    else:
+        openings, problems = collect(args.days, args.max_drive, args.all_fees)
+        for msg in problems:
+            print(f"  ! {msg}", file=sys.stderr)
+        records = to_records(openings)
 
-    records = to_records(openings)
     clubs = len({r["club"] for r in records})
     print(f"{len(records)} tee times across {clubs} clubs", file=sys.stderr)
 
-    stamp = datetime.now().strftime("%-d %b, %-I:%M%p").lower()
+    # Offline rebuilds keep the original scan time so the page doesn't claim
+    # to be fresher than the data behind it.
+    built = cached_built() if args.offline else datetime.now().astimezone().isoformat()
+
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
-            .replace("__STAMP__", stamp)
+            .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
-            .replace("__DRIVE__", str(args.max_drive))
-            .replace("__RULE__", "<span></span>" * 18))
+            .replace("__DRIVE__", str(args.max_drive)))
 
     OUT_DIR.mkdir(exist_ok=True)
     OUT_FILE.write_text(html, encoding="utf-8")
