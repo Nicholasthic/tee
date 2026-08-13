@@ -113,6 +113,31 @@ aggregator. Use `golfnow` only for facilities with no Tee It Up front end.
 Clubs outside Queensland should set `timezone:` (e.g. `Australia/Sydney`), since
 NSW observes daylight saving and Queensland doesn't.
 
+### Clubs you can't scan
+
+Some public courses have no tee sheet worth scraping — phone-only, or on a
+platform with no adapter. Rather than vanish from the page, they get a
+call-to-book card under **No online sheet**:
+
+```yaml
+  - name: Southport Golf Club
+    drive_min: 25
+    enabled: false                  # nothing to scan
+    public: true                    # required — private clubs are never listed
+    phone: "+61755711444"           # becomes a tap-to-dial link
+    phone_display: (07) 5571 1444
+    book_url: https://...           # optional "Book online" button
+    note: Books through Chronogolf
+```
+
+`public: true` is the gate, so members-only clubs never appear. The card is
+suppressed for `status: closed`, respects the max-drive filter, and ignores the
+day/time/group filters — there are no times to filter on. It still shows when
+nothing else is open, which is exactly when you want a phone number.
+
+Don't add a club here without checking the number: a wrong one is worse than
+no card at all.
+
 ---
 
 ## The page

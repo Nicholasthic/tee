@@ -47,6 +47,36 @@ def collect(days: int, max_drive: int, all_fees: bool):
     return openings, problems
 
 
+def collect_contacts(max_drive: int) -> list[dict]:
+    """Public clubs we can't scan, so the page can at least hand you the phone.
+
+    A club qualifies when it's open to visitors, is still operating, and has a
+    phone number or a booking link. `enabled` is irrelevant here — these are
+    precisely the clubs the scanner skips.
+    """
+    config = yaml.safe_load((ROOT / "clubs.yaml").read_text())
+    out = []
+
+    for club in config["clubs"]:
+        if not club.get("public") or club.get("status") == "closed":
+            continue
+        if club.get("drive_min", 0) > max_drive:
+            continue
+        if not (club.get("phone") or club.get("book_url")):
+            continue
+        out.append({
+            "club": club["name"],
+            "drive": club.get("drive_min", 0),
+            "phone": club.get("phone"),
+            "phoneText": club.get("phone_display") or club.get("phone"),
+            "url": club.get("book_url"),
+            "note": club.get("note", ""),
+        })
+
+    out.sort(key=lambda c: (c["drive"], c["club"]))
+    return out
+
+
 def _cached_page() -> str:
     if not OUT_FILE.exists():
         raise SystemExit("no docs/index.html to reuse — run without --offline first")
@@ -352,6 +382,29 @@ TEMPLATE = """<!doctype html>
   }
   .more:hover{border-color:var(--sand)}
 
+  /* Public clubs with no scrapable sheet. Deliberately quieter than a real
+     result — this is "we can't see inside", not "a slot is free". */
+  .ring .card{background:transparent; border-style:dashed; box-shadow:none}
+  .ring .cmeta{margin-top:3px}
+  .acts{display:flex; flex-wrap:wrap; gap:6px}
+  .call{
+    display:inline-flex; align-items:center; gap:6px;
+    font:inherit; font-size:12.5px; font-weight:600; text-decoration:none;
+    background:var(--accent); color:var(--accent-ink);
+    border:1px solid var(--accent); border-radius:9px; padding:6px 11px;
+    font-variant-numeric:tabular-nums;
+  }
+  .call:hover{opacity:.88}
+  .call svg{width:13px; height:13px; fill:none; stroke:currentColor;
+            stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  .online{
+    display:inline-flex; align-items:center;
+    font:inherit; font-size:12.5px; font-weight:550; text-decoration:none;
+    color:var(--sand); background:var(--sand-bg);
+    border:1px solid var(--sand-line); border-radius:9px; padding:6px 11px;
+  }
+  .online:hover{border-color:var(--sand)}
+
   .empty{
     text-align:center; padding:60px 20px; margin-top:22px;
     border:1px dashed var(--border2); border-radius:var(--radius);
@@ -426,6 +479,7 @@ TEMPLATE = """<!doctype html>
 <main class="inner">
   <div class="stats" id="stats"></div>
   <div id="list"></div>
+  <div id="ring"></div>
   <footer>
     <span>Public MiClub timesheets · tap a time to book</span>
     <span id="built"></span>
@@ -434,6 +488,7 @@ TEMPLATE = """<!doctype html>
 
 <script>
 const DATA = __DATA__;
+const CONTACTS = __CONTACTS__;
 const BUILT = "__BUILT__";
 
 /* ---------- helpers ---------- */
@@ -723,10 +778,37 @@ function renderList(){
   list.innerHTML = html;
 }
 
+function renderRing(){
+  const el = $('ring');
+  // Only the drive filter applies — there are no times to filter on.
+  const rows = CONTACTS.filter(c => c.drive <= state.drive);
+  if (!rows.length){ el.innerHTML = ''; return; }
+
+  const phoneIcon = '<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.7 2.6a2 2 0 0 1-.5 2.1L8.1 9.6a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.8.4 1.7.6 2.6.7a2 2 0 0 1 1.7 2Z"/></svg>';
+
+  el.innerHTML =
+    '<div class="dayhead"><h2>No online sheet</h2><div class="ln"></div>' +
+    '<span class="cnt">' + rows.length + (rows.length === 1 ? ' club' : ' clubs') + '</span></div>' +
+    '<div class="grid ring">' + rows.map(c =>
+      '<article class="card">' +
+        '<div class="chead"><div class="cinfo">' +
+          '<span class="cname">' + esc(c.club) + '</span>' +
+          '<div class="cmeta">' + esc(c.note || 'Call the pro shop to check availability') + '</div>' +
+        '</div><span class="drive' + (c.drive <= 20 ? ' near' : '') + '">' + c.drive + ' min</span></div>' +
+        '<div class="acts">' +
+          (c.phone ? '<a class="call" href="tel:' + esc(c.phone) + '">' + phoneIcon +
+                     esc(c.phoneText || c.phone) + '</a>' : '') +
+          (c.url ? '<a class="online" href="' + esc(c.url) + '" target="_blank" rel="noopener">Book online</a>' : '') +
+        '</div>' +
+      '</article>').join('') +
+    '</div>';
+}
+
 function render(){
   syncControls();
   renderDays();
   renderList();
+  renderRing();
   save();
 }
 
@@ -762,8 +844,13 @@ def main() -> int:
     # to be fresher than the data behind it.
     built = cached_built() if args.offline else datetime.now().astimezone().isoformat()
 
+    contacts = collect_contacts(args.max_drive)
+    if contacts:
+        print(f"{len(contacts)} call-to-book clubs", file=sys.stderr)
+
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
+            .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
             .replace("__DRIVE__", str(args.max_drive)))

@@ -53,12 +53,18 @@ clubs:
 
   # MiClub host resolves but publishes no public fee groups; the public
   # inventory sits on Chronogolf (Lightspeed), which has no adapter yet.
+  # Can't be scanned, so it's surfaced on the page as a call-to-book instead.
   - name: Southport Golf Club
     host: https://southport.miclub.com.au
     booking_resource_id: null
     drive_min: 25
     status: chronogolf
     enabled: false
+    public: true
+    phone: "+61755711444"
+    phone_display: (07) 5571 1444
+    book_url: https://www.chronogolf.com/club/southport-golf-club
+    note: Books through Chronogolf
 
   - name: Coolangatta & Tweed Heads
     host: https://www.cooltweedgolf.com.au
@@ -129,13 +135,15 @@ clubs:
     status: confirmed
     enabled: true
 
-  # No public online tee sheet found on any platform — phone booking only.
+  # Could not confirm this course actually exists — the only golf at Cudgen
+  # Leagues is a monthly social group, not a tee sheet. Left off the page
+  # rather than published with a guessed phone number. Delete if it's a ghost.
   - name: Kingscliff / Cudgen Leisure Land (NSW)
     host: https://cudgen.miclub.com.au
     booking_resource_id: null
     drive_min: 40
     timezone: Australia/Sydney
-    status: unlisted
+    status: unverified
     enabled: false
 
   - name: Windaroo Lakes
