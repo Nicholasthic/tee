@@ -133,7 +133,9 @@ TEMPLATE = """<!doctype html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f5f3ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#080d0a" media="(prefers-color-scheme: dark)">
-<title>Tee Times</title>
+<title>S&amp;N Go Golfing</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='15' fill='%2314653f'/><path d='M22 56V9' stroke='%23fbfdf8' stroke-width='5' stroke-linecap='round'/><path d='M24.5 11.5 49 21 24.5 30.5Z' fill='%23b6432f'/><circle cx='22' cy='55' r='5.5' fill='%23fbfdf8'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%2314653f'/><path d='M22 56V9' stroke='%23fbfdf8' stroke-width='5' stroke-linecap='round'/><path d='M24.5 11.5 49 21 24.5 30.5Z' fill='%23b6432f'/><circle cx='22' cy='55' r='5.5' fill='%23fbfdf8'/></svg>">
 <script>try{var _t=localStorage.getItem('tee.theme');document.documentElement.dataset.theme=_t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -196,20 +198,34 @@ TEMPLATE = """<!doctype html>
   .bar{padding:18px 0 12px}
   .bar .inner{display:flex; align-items:center; justify-content:space-between; gap:14px}
   .brand{display:flex; align-items:center; gap:11px; min-width:0}
+  /* S&N monogram: the tile is a mown green, the ampersand is the pin.
+     Letters carry the name at 36px; the flag mark in the favicon does the
+     same job at 16px, where three glyphs would just be mud. */
   .mark{
-    width:36px; height:36px; flex:none; border-radius:11px;
-    background:var(--accent); color:var(--accent-ink);
+    width:38px; height:38px; flex:none; border-radius:11px;
+    background-color:var(--accent); color:var(--accent-ink);
+    background-image:repeating-linear-gradient(90deg,
+      rgba(255,255,255,.13) 0 5px, transparent 5px 10px);
     display:grid; place-items:center;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.07);
   }
-  .mark svg{width:20px; height:20px; fill:none; stroke:currentColor;
-            stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round}
-  .mark .fl{fill:var(--flag); stroke:var(--flag); stroke-width:1.4}
+  .mark b{
+    font-size:13px; font-weight:800; letter-spacing:-.045em; line-height:1;
+    display:flex; align-items:baseline;
+  }
+  .mark i{
+    font-style:normal; font-family:Georgia,"Times New Roman",serif;
+    font-size:15px; font-weight:700; letter-spacing:-.02em;
+    margin:0 .5px; opacity:.82;
+  }
 
   /* a mown strip of fairway between the masthead and the filters */
   .turf{height:7px; background-color:var(--accent);
     background-image:repeating-linear-gradient(90deg,
       rgba(255,255,255,.16) 0 26px, transparent 26px 52px)}
-  h1{font-size:19px; font-weight:650; letter-spacing:-.025em; line-height:1.2}
+  h1{font-size:19px; font-weight:650; letter-spacing:-.025em; line-height:1.2;
+     overflow-wrap:anywhere}
+  @media (max-width:360px){ h1{font-size:17px} }
   .sub{font-size:11.5px; color:var(--dim); margin-top:1px}
   .icon{
     width:36px; height:36px; flex:none; border-radius:11px; cursor:pointer;
@@ -313,20 +329,27 @@ TEMPLATE = """<!doctype html>
   .reset{margin-left:auto; font:inherit; font-size:12px; font-weight:550;
          background:none; border:0; color:var(--accent); cursor:pointer; padding:3px 0}
 
+  /* Both halves were nowrap, which overflowed a narrow phone. The heading may
+     wrap; the count is the first thing to go when there is no room. */
   .dayhead{display:flex; align-items:center; gap:12px; margin:26px 0 12px}
-  .dayhead h2{font-size:14px; font-weight:650; letter-spacing:-.015em; white-space:nowrap}
-  .dayhead .ln{flex:1; height:1px; background:var(--border)}
+  .dayhead h2{font-size:14px; font-weight:650; letter-spacing:-.015em; min-width:0}
+  .dayhead .ln{flex:1; min-width:12px; height:1px; background:var(--border)}
   .dayhead .cnt{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums;
-                white-space:nowrap}
+                white-space:nowrap; flex:none}
+  @media (max-width:400px){ .dayhead .cnt{display:none} }
 
-  .grid{display:grid; gap:12px; grid-template-columns:1fr}
-  @media (min-width:680px){ .grid{grid-template-columns:repeat(2,1fr)} }
-  @media (min-width:1040px){ .grid{grid-template-columns:repeat(3,1fr)} }
+  /* minmax(0,…) not 1fr: a bare 1fr track is floored at the item's min-content,
+     so one long fee label or club name would push the card wider than the
+     phone and scroll the whole page sideways. */
+  .grid{display:grid; gap:12px; grid-template-columns:minmax(0,1fr)}
+  @media (min-width:680px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (min-width:1040px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
 
   .card{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     padding:13px 14px 12px; box-shadow:var(--shadow);
     display:flex; flex-direction:column; gap:10px;
+    min-width:0; overflow:hidden;
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   @media (hover:hover){ .card:hover{border-color:var(--accent-line)} }
@@ -334,7 +357,7 @@ TEMPLATE = """<!doctype html>
   /* min-width:0 so the nowrap fee line can ellipsis instead of widening the card */
   .cinfo{min-width:0}
   .cname{display:block; font-size:14.5px; font-weight:650; letter-spacing:-.015em;
-         line-height:1.25; color:inherit; text-decoration:none}
+         line-height:1.25; color:inherit; text-decoration:none; overflow-wrap:anywhere}
   .cname:hover{color:var(--accent)}
   .cmeta{font-size:11.5px; color:var(--dim); margin-top:2px; font-variant-numeric:tabular-nums}
   .fees{font-size:10.5px; color:var(--faint); margin-top:2px;
@@ -427,12 +450,9 @@ TEMPLATE = """<!doctype html>
 
 <header class="bar"><div class="inner">
   <div class="brand">
-    <div class="mark"><svg viewBox="0 0 24 24">
-      <path class="fl" d="M8.6 2.8 17.4 6.4 8.6 10Z"/>
-      <path d="M8.6 18.4V2.4"/><circle cx="8.6" cy="20.4" r="2"/>
-    </svg></div>
+    <div class="mark" aria-hidden="true"><b>S<i>&amp;</i>N</b></div>
     <div>
-      <h1>Tee Times</h1>
+      <h1>S&amp;N Go Golfing</h1>
       <div class="sub" id="sub">__NCLUB__ clubs within __DRIVE__ min</div>
     </div>
   </div>
@@ -481,7 +501,7 @@ TEMPLATE = """<!doctype html>
   <div id="list"></div>
   <div id="ring"></div>
   <footer>
-    <span>Public MiClub timesheets · tap a time to book</span>
+    <span>Public tee sheets · tap a time to book</span>
     <span id="built"></span>
   </footer>
 </main>

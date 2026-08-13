@@ -1,6 +1,8 @@
-# teetime-watch
+# S&N Go Golfing
 
 Tells you when a four-ball opens up within ~45 minutes of the Gold Coast, over the next 7 days.
+
+(The repo and scripts are still named `teetime-watch`; `S&N Go Golfing` is what the page calls itself.)
 
 Scrapes the public MiClub timesheets that nearly every club in the region uses. No login, no booking automation — it finds the slot and hands you a link.
 
