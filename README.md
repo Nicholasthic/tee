@@ -146,5 +146,7 @@ which GitHub Pages serves from `docs/`.
 
 - Requests are spaced 1.5s apart. Don't lower that. These are small club servers and the whole point is to stay unremarkable in their logs.
 - Some clubs sell explicit "4 Player Package" fee groups, which show up as their own entry in `--discover`. Those are the easiest wins.
-- If a club comes back `NO-PUB`, its public inventory probably isn't on MiClub at all. Try the `teeitup` source — see below.
+- If a club comes back `NO-PUB`, its public inventory probably isn't on MiClub at all. Try the `teeitup` source — see above.
+- The next platform worth an adapter is **Chronogolf** (Lightspeed). Southport books through it, and it's the common second listing for clubs that are also on GolfNow. Everything else nearby is now covered.
+- Arundel Hills closed in May 2022. It's kept in `clubs.yaml` as a tombstone with `status: closed` so it doesn't get re-added from a stale course list.
 - Booking stays manual by design. Twenty-odd clubs each with their own account, payment flow and dress-code T&Cs is a lot of fragile surface area for no real gain over tapping a link.

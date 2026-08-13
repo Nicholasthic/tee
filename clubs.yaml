@@ -1,8 +1,15 @@
 # teetime-watch club registry
 #
-# status: confirmed  = MiClub host verified to exist
-#         candidate  = likely MiClub, needs `python scan.py --discover` to verify
-#         manual     = not on MiClub, book direct (listed for reference only)
+# source: miclub   = the club's own MiClub timesheet (default if omitted)
+#         teeitup  = the club's own Tee It Up site; needs alias + facility_id
+#         golfnow  = GolfNow AU; needs facility_id. Prefer teeitup where both
+#                    exist — same facility ids, far lighter, books direct.
+#
+# status: confirmed  = verified working by `python scan.py --discover`
+#         candidate  = unverified guess
+#         chronogolf = books via Chronogolf/Lightspeed; no adapter yet
+#         unlisted   = no public online tee sheet found; phone only
+#         closed     = course no longer operating; kept so it isn't re-added
 #
 # drive_min is approximate from Nerang/Robina.
 # Set enabled: false on anything you'd never actually play.
@@ -44,11 +51,13 @@ clubs:
     status: confirmed
     enabled: true
 
+  # MiClub host resolves but publishes no public fee groups; the public
+  # inventory sits on Chronogolf (Lightspeed), which has no adapter yet.
   - name: Southport Golf Club
     host: https://southport.miclub.com.au
-    booking_resource_id: null       # discover
+    booking_resource_id: null
     drive_min: 25
-    status: confirmed
+    status: chronogolf
     enabled: false
 
   - name: Coolangatta & Tweed Heads
@@ -82,19 +91,21 @@ clubs:
     status: confirmed
     enabled: true
 
+  # Closed permanently in May 2022. Kept as a tombstone so it doesn't get
+  # re-added as a "candidate" next time someone reads a course list.
   - name: Arundel Hills
     host: https://arundelhills.miclub.com.au
     booking_resource_id: null
     drive_min: 20
-    status: candidate
+    status: closed
     enabled: false
 
   - name: Gainsborough Greens
-    host: https://gainsboroughgreens.miclub.com.au
-    booking_resource_id: null
+    source: golfnow
+    facility_id: 16659
     drive_min: 35
-    status: candidate
-    enabled: false
+    status: confirmed
+    enabled: true
 
   - name: Emerald Lakes
     host: https://emeraldlakes.miclub.com.au
@@ -103,12 +114,13 @@ clubs:
     status: confirmed
     enabled: true
 
+  # Nine holes, eighteen tees — the 18-hole rate is a full round.
   - name: Tamborine Mountain
-    host: https://tamborinemountain.miclub.com.au
-    booking_resource_id: null
+    source: golfnow
+    facility_id: 16095
     drive_min: 40
-    status: candidate
-    enabled: false
+    status: confirmed
+    enabled: true
 
   - name: Murwillumbah (NSW)
     host: https://murwillumbah.miclub.com.au
@@ -117,11 +129,13 @@ clubs:
     status: confirmed
     enabled: true
 
+  # No public online tee sheet found on any platform — phone booking only.
   - name: Kingscliff / Cudgen Leisure Land (NSW)
     host: https://cudgen.miclub.com.au
     booking_resource_id: null
     drive_min: 40
-    status: candidate
+    timezone: Australia/Sydney
+    status: unlisted
     enabled: false
 
   - name: Windaroo Lakes
