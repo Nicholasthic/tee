@@ -134,8 +134,8 @@ TEMPLATE = """<!doctype html>
 <meta name="theme-color" content="#f5f3ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#080d0a" media="(prefers-color-scheme: dark)">
 <title>S&amp;N Go Golfing</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='15' fill='%2314653f'/><path d='M22 56V9' stroke='%23fbfdf8' stroke-width='5' stroke-linecap='round'/><path d='M24.5 11.5 49 21 24.5 30.5Z' fill='%23b6432f'/><circle cx='22' cy='55' r='5.5' fill='%23fbfdf8'/></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%2314653f'/><path d='M22 56V9' stroke='%23fbfdf8' stroke-width='5' stroke-linecap='round'/><path d='M24.5 11.5 49 21 24.5 30.5Z' fill='%23b6432f'/><circle cx='22' cy='55' r='5.5' fill='%23fbfdf8'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='15' fill='%2314653f'/><path d='M10 56.5H54' stroke='%23fbfdf8' stroke-width='2.6' stroke-linecap='round' opacity='.4'/><path d='M18 10 28.5 38' stroke='%23fbfdf8' stroke-width='4.2' stroke-linecap='round' fill='none'/><path d='M29.5 36 33 46.5 14 52.5 10.5 43Z' fill='%23fbfdf8'/><path d='M40 37H54L50.5 41H43.5Z M45.2 41H48.8L48 53H46Z' fill='%23fbfdf8'/><circle cx='47' cy='29.5' r='6.8' fill='%23fbfdf8' stroke='%2314653f' stroke-width='2.6'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='0' fill='%2314653f'/><path d='M10 56.5H54' stroke='%23fbfdf8' stroke-width='2.6' stroke-linecap='round' opacity='.4'/><path d='M18 10 28.5 38' stroke='%23fbfdf8' stroke-width='4.2' stroke-linecap='round' fill='none'/><path d='M29.5 36 33 46.5 14 52.5 10.5 43Z' fill='%23fbfdf8'/><path d='M40 37H54L50.5 41H43.5Z M45.2 41H48.8L48 53H46Z' fill='%23fbfdf8'/><circle cx='47' cy='29.5' r='6.8' fill='%23fbfdf8' stroke='%2314653f' stroke-width='2.6'/></svg>">
 <script>try{var _t=localStorage.getItem('tee.theme');document.documentElement.dataset.theme=_t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -198,26 +198,24 @@ TEMPLATE = """<!doctype html>
   .bar{padding:18px 0 12px}
   .bar .inner{display:flex; align-items:center; justify-content:space-between; gap:14px}
   .brand{display:flex; align-items:center; gap:11px; min-width:0}
-  /* S&N monogram: the tile is a mown green, the ampersand is the pin.
-     Letters carry the name at 36px; the flag mark in the favicon does the
-     same job at 16px, where three glyphs would just be mud. */
+  /* Iron addressing a ball on a tee, on a mown green tile. Drawn as one
+     cream silhouette so it survives small sizes; the ball is knocked out
+     from the tee with a tile-coloured stroke so the two stay legible when
+     they touch. */
   .mark{
     width:38px; height:38px; flex:none; border-radius:11px;
     background-color:var(--accent); color:var(--accent-ink);
     background-image:repeating-linear-gradient(90deg,
-      rgba(255,255,255,.13) 0 5px, transparent 5px 10px);
+      rgba(255,255,255,.1) 0 5px, transparent 5px 10px);
     display:grid; place-items:center;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.07);
   }
-  .mark b{
-    font-size:13px; font-weight:800; letter-spacing:-.045em; line-height:1;
-    display:flex; align-items:baseline;
-  }
-  .mark i{
-    font-style:normal; font-family:Georgia,"Times New Roman",serif;
-    font-size:15px; font-weight:700; letter-spacing:-.02em;
-    margin:0 .5px; opacity:.82;
-  }
+  .mark svg{width:26px; height:26px}
+  .logo .shaft{fill:none; stroke:currentColor; stroke-width:4.2; stroke-linecap:round}
+  .logo .head, .logo .tee, .logo .ball{fill:currentColor}
+  .logo .ball{stroke:var(--accent); stroke-width:2.6}
+  .logo .turfline{fill:none; stroke:currentColor; stroke-width:2.6;
+                  stroke-linecap:round; opacity:.4}
 
   /* a mown strip of fairway between the masthead and the filters */
   .turf{height:7px; background-color:var(--accent);
@@ -225,6 +223,8 @@ TEMPLATE = """<!doctype html>
       rgba(255,255,255,.16) 0 26px, transparent 26px 52px)}
   h1{font-size:19px; font-weight:650; letter-spacing:-.025em; line-height:1.2;
      overflow-wrap:anywhere}
+  /* the initials carry the name; the tile carries the game */
+  h1 .sn{font-weight:800; color:var(--accent); letter-spacing:-.04em}
   @media (max-width:360px){ h1{font-size:17px} }
   .sub{font-size:11.5px; color:var(--dim); margin-top:1px}
   .icon{
@@ -450,9 +450,15 @@ TEMPLATE = """<!doctype html>
 
 <header class="bar"><div class="inner">
   <div class="brand">
-    <div class="mark" aria-hidden="true"><b>S<i>&amp;</i>N</b></div>
+    <div class="mark" aria-hidden="true"><svg class="logo" viewBox="0 0 64 64">
+      <path class="turfline" d="M10 56.5H54"/>
+      <path class="shaft" d="M18 10 28.5 38"/>
+      <path class="head" d="M29.5 36 33 46.5 14 52.5 10.5 43Z"/>
+      <path class="tee" d="M40 37H54L50.5 41H43.5Z M45.2 41H48.8L48 53H46Z"/>
+      <circle class="ball" cx="47" cy="29.5" r="6.8"/>
+    </svg></div>
     <div>
-      <h1>S&amp;N Go Golfing</h1>
+      <h1><span class="sn">S&amp;N</span> Go Golfing</h1>
       <div class="sub" id="sub">__NCLUB__ clubs within __DRIVE__ min</div>
     </div>
   </div>
