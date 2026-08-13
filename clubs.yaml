@@ -66,12 +66,14 @@ clubs:
     enabled: true
 
   # ---------- candidates: run --discover to confirm ----------
+  # Not on MiClub — books through its own Tee It Up site.
   - name: The Glades
-    host: https://theglades.miclub.com.au
-    booking_resource_id: null
+    source: teeitup
+    alias: thegladesgolfclub
+    facility_id: 15365
     drive_min: 10
     status: confirmed
-    enabled: false
+    enabled: true
 
   - name: Surfers Paradise Golf Club
     host: https://surfersparadise.miclub.com.au

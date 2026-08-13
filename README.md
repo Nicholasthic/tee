@@ -69,6 +69,52 @@ Budget note: with ~10 live clubs it's about 4 minutes per run, so roughly 1,400 
 
 ---
 
+## Adding a club
+
+Every club declares a `source`. It defaults to `miclub`, so existing entries need
+no change.
+
+```yaml
+  - name: Some Golf Club            # miclub — the club's own timesheet
+    host: https://someclub.miclub.com.au
+    booking_resource_id: null       # null is fine; falls back to 3000000
+    drive_min: 25
+
+  - name: The Glades                # teeitup — the club's own booking site
+    source: teeitup
+    alias: thegladesgolfclub        # the subdomain of *.book.teeitup.com
+    facility_id: 15365
+    drive_min: 10
+```
+
+Then verify before switching it on:
+
+```bash
+python scan.py --discover
+```
+
+`--discover` checks every club in the file, including disabled ones — the whole
+point is to test a club *before* you enable it.
+
+**Which source?** A lot of clubs aren't on MiClub. If the MiClub host is `DEAD`
+or `NO-PUB`, open the club's website and click "Book a tee time":
+
+- Lands on `<something>.book.teeitup.com/?course=NNNNN` → `source: teeitup`,
+  with `alias` from the subdomain and `facility_id` from `course`.
+- Lands on `golfnow.com.au/tee-times/facility/NNNNN-...` → `source: golfnow`,
+  `facility_id: NNNNN`.
+
+Tee It Up and GolfNow are both NBC Sports Next products and share facility ids,
+so the same number works for either. **Prefer `teeitup`**: it's a plain GET, the
+response is ~50x smaller, it states allowed group sizes explicitly instead of as
+an enum, and its links book direct with the club rather than through the
+aggregator. Use `golfnow` only for facilities with no Tee It Up front end.
+
+Clubs outside Queensland should set `timezone:` (e.g. `Australia/Sydney`), since
+NSW observes daylight saving and Queensland doesn't.
+
+---
+
 ## The page
 
 `build.py` scans every club and writes a single self-contained `docs/index.html` — no
@@ -100,5 +146,5 @@ which GitHub Pages serves from `docs/`.
 
 - Requests are spaced 1.5s apart. Don't lower that. These are small club servers and the whole point is to stay unremarkable in their logs.
 - Some clubs sell explicit "4 Player Package" fee groups, which show up as their own entry in `--discover`. Those are the easiest wins.
-- Emerald Lakes and a few others also list on GolfNow AU. If a club comes back `NO-PUB`, that's usually why — its public inventory sits on GolfNow rather than its own MiClub timesheet. Worth adding a GolfNow adapter later if it turns out to matter.
+- If a club comes back `NO-PUB`, its public inventory probably isn't on MiClub at all. Try the `teeitup` source — see below.
 - Booking stays manual by design. Twenty-odd clubs each with their own account, payment flow and dress-code T&Cs is a lot of fragile surface area for no real gain over tapping a link.

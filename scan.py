@@ -20,9 +20,10 @@ import smtplib
 import sys
 import time
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 import yaml
@@ -35,10 +36,32 @@ DEBUG_DIR = ROOT / "debug"
 CALENDAR_PATH = "/guests/bookings/ViewPublicCalendar.msp"
 TIMESHEET_PATH = "/guests/bookings/ViewPublicTimesheet.msp"
 
+# Tee It Up and GolfNow are both NBC Sports Next products and share facility
+# ids, so one `facility_id` in clubs.yaml serves either adapter. Prefer
+# teeitup: it is a plain GET, the response is ~50x smaller, it states allowed
+# player counts explicitly, and it books direct with the club.
+TEEITUP_API = "https://phx-api-be-east-1b.kenna.io/v2/tee-times"
+TEEITUP_BOOK = "https://{alias}.book.teeitup.com/?course={facility}&date={day}"
+GOLFNOW_API = "https://www.golfnow.com.au/api/tee-times/tee-time-search-results"
+GOLFNOW_SUMMARY = ("https://www.golfnow.com.au/api/tee-times/tee-times"
+                   "/facility/{facility}/summaries/from/{start}/to/{end}")
+GOLFNOW_BOOK = "https://www.golfnow.com.au"
+
+DEFAULT_TZ = "Australia/Brisbane"
+
+# GolfNow states availability as an enum rather than a count.
+PLAYER_RULES = {
+    "one": 1, "two": 2, "three": 3, "four": 4,
+    "onetwo": 2, "onetwothree": 3, "onetwothreefour": 4,
+    "twothree": 3, "twothreefour": 4, "threefour": 4, "twofour": 4,
+    "any": 4,
+}
+
 HEADERS = {
     "User-Agent": "teetime-watch/1.0 (personal tee time checker)",
     "Accept": "text/html,application/xhtml+xml",
 }
+JSON_HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 # Be a good citizen. These pages are small; there is no reason to hammer them.
 REQUEST_DELAY = 1.5
@@ -112,6 +135,53 @@ def get(session: requests.Session, url: str) -> str | None:
         return r.text
     except requests.RequestException:
         return None
+
+
+def fetch_json(session: requests.Session, url: str, *, payload: dict | None = None,
+               headers: dict | None = None):
+    """GET, or POST when `payload` is given. Same politeness delay as get()."""
+    h = dict(JSON_HEADERS)
+    if headers:
+        h.update(headers)
+    try:
+        if payload is None:
+            r = session.get(url, headers=h, timeout=TIMEOUT)
+        else:
+            r = session.post(url, headers=h, json=payload, timeout=TIMEOUT)
+        time.sleep(REQUEST_DELAY)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except (requests.RequestException, json.JSONDecodeError):
+        return None
+
+
+def club_zone(club: dict) -> ZoneInfo | timezone:
+    """Queensland has no daylight saving; northern NSW does. Let clubs differ."""
+    try:
+        return ZoneInfo(club.get("timezone", DEFAULT_TZ))
+    except Exception:                       # missing tzdata on a bare runner
+        return timezone(timedelta(hours=10))
+
+
+def utc_to_local(iso: str, zone) -> tuple[str, str]:
+    """'2026-08-14T01:56:00.000Z' -> ('2026-08-14', '11:56') in club-local time.
+
+    Tee It Up timestamps are genuinely UTC.
+    """
+    stamp = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(zone)
+    return stamp.date().isoformat(), stamp.strftime("%H:%M")
+
+
+def wall_time(iso: str) -> tuple[str, str]:
+    """'2026-08-16T10:08:00+00:00' -> ('2026-08-16', '10:08').
+
+    GolfNow sends local wall time but stamps it '+00:00'. Converting it as if
+    it were UTC would shift every tee time by the club's offset, so read the
+    clock face as written and ignore the zone entirely.
+    """
+    stamp = datetime.fromisoformat(iso).replace(tzinfo=None)
+    return stamp.date().isoformat(), stamp.strftime("%H:%M")
 
 
 # ----------------------------------------------------------------------------
@@ -207,8 +277,8 @@ def build_timesheet_url(host: str, resource: str, fee: str | None, day: date) ->
     return url
 
 
-def scan_club(session, club: dict, days: int, min_players: int,
-              debug_name: str | None, include_all_fees: bool = False) -> tuple[list[Opening], str | None]:
+def scan_miclub(session, club: dict, days: int, min_players: int,
+                debug_name: str | None, include_all_fees: bool = False) -> tuple[list[Opening], str | None]:
     host = club["host"].rstrip("/")
     name = club["name"]
 
@@ -263,6 +333,159 @@ def scan_club(session, club: dict, days: int, min_players: int,
                     ))
 
     return openings, None
+
+
+def scan_teeitup(session, club: dict, days: int, min_players: int,
+                 debug_name: str | None, include_all_fees: bool = False) -> tuple[list[Opening], str | None]:
+    """A club's own Tee It Up booking site.
+
+    One GET per day. `allowedPlayers` is an explicit list of the group sizes
+    the club will sell for that slot, so the largest entry is how many spots
+    are actually free — no guessing from markup.
+    """
+    alias, facility = club.get("alias"), club.get("facility_id")
+    name = club["name"]
+    if not alias or not facility:
+        return [], f"{name}: teeitup needs both `alias` and `facility_id`"
+
+    zone = club_zone(club)
+    openings: list[Opening] = []
+    reached = False
+
+    for offset in range(days + 1):
+        day = date.today() + timedelta(days=offset)
+        data = fetch_json(
+            session,
+            f"{TEEITUP_API}?date={day.isoformat()}&facilityIds={facility}",
+            headers={"x-be-alias": alias},
+        )
+        if not data:
+            continue
+        reached = True
+
+        book = TEEITUP_BOOK.format(alias=alias, facility=facility, day=day.isoformat())
+
+        for block in data:
+            for slot in block.get("teetimes") or []:
+                for rate in slot.get("rates") or []:
+                    label = rate.get("name") or "18 Holes"
+                    if not include_all_fees and not is_full_round(label):
+                        continue
+
+                    allowed = [p for p in (rate.get("allowedPlayers") or [])
+                               if isinstance(p, int)]
+                    free = max(allowed) if allowed else 0
+                    if free < min_players:
+                        continue
+
+                    iso_day, tee_time = utc_to_local(slot["teetime"], zone)
+                    openings.append(Opening(
+                        club=name,
+                        drive_min=club.get("drive_min", 0),
+                        day=iso_day,
+                        tee_time=tee_time,
+                        free=free,
+                        fee_label=label,
+                        url=book,
+                        total=4,
+                    ))
+
+    if not reached:
+        return [], f"{name}: teeitup api unreachable (alias {alias!r})"
+    return openings, None
+
+
+def golfnow_payload(facility: int, day: date) -> dict:
+    return {
+        "pageSize": 100, "pageNumber": 0,
+        "date": day.strftime("%b %d %Y"),
+        "sortBy": "Date", "sortDirection": 0,
+        "facilityId": int(facility), "searchType": "Facility", "view": "List",
+        "holes": "Any", "players": 0, "priceMin": 0, "priceMax": 10000,
+        "timePeriod": "Any", "timeMin": 0, "timeMax": 48,
+        "rateType": "all", "radius": 100,
+    }
+
+
+def scan_golfnow(session, club: dict, days: int, min_players: int,
+                 debug_name: str | None, include_all_fees: bool = False) -> tuple[list[Opening], str | None]:
+    """GolfNow AU — the fallback for facilities with no Tee It Up front end.
+
+    A single summaries call reports how many tee times exist per day, so days
+    with nothing available are skipped instead of fetched. Each detail response
+    is heavy (~400KB), which makes that pruning worth doing.
+    """
+    facility = club.get("facility_id")
+    name = club["name"]
+    if not facility:
+        return [], f"{name}: golfnow needs `facility_id`"
+
+    today = date.today()
+    end = today + timedelta(days=days)
+
+    summary = fetch_json(session, GOLFNOW_SUMMARY.format(
+        facility=facility, start=today.isoformat(), end=end.isoformat()))
+    if summary is None:
+        return [], f"{name}: golfnow api unreachable (facility {facility})"
+
+    live = {
+        row["playDateUtc"][:10]
+        for row in summary
+        if (row.get("numberOfTeeTimesAvailable") or 0) > 0
+    }
+    if not live:
+        return [], None
+
+    openings: list[Opening] = []
+
+    for offset in range(days + 1):
+        day = today + timedelta(days=offset)
+        if day.isoformat() not in live:
+            continue
+
+        data = fetch_json(session, GOLFNOW_API, payload=golfnow_payload(facility, day))
+        if not data:
+            continue
+
+        for slot in (data.get("ttResults") or {}).get("teeTimes") or []:
+            label = (slot.get("teeTimeRates") or [{}])[0].get("name") or "18 Holes"
+            if not include_all_fees and not is_full_round(label):
+                continue
+
+            free = PLAYER_RULES.get(str(slot.get("playerRule", "")).lower(), 0)
+            if free < min_players:
+                continue
+
+            iso_day, tee_time = wall_time(slot["time"]["date"])
+            openings.append(Opening(
+                club=name,
+                drive_min=club.get("drive_min", 0),
+                day=iso_day,
+                tee_time=tee_time,
+                free=free,
+                fee_label=label,
+                url=GOLFNOW_BOOK + (slot.get("detailUrl") or ""),
+                total=4,
+            ))
+
+    return openings, None
+
+
+SOURCES = {
+    "miclub": scan_miclub,
+    "teeitup": scan_teeitup,
+    "golfnow": scan_golfnow,
+}
+
+
+def scan_club(session, club: dict, days: int, min_players: int,
+              debug_name: str | None, include_all_fees: bool = False) -> tuple[list[Opening], str | None]:
+    """Dispatch to the right adapter. Clubs default to miclub."""
+    source = club.get("source", "miclub")
+    adapter = SOURCES.get(source)
+    if adapter is None:
+        return [], f"{club['name']}: unknown source {source!r} (try {'/'.join(SOURCES)})"
+    return adapter(session, club, days, min_players, debug_name, include_all_fees)
 
 
 # ----------------------------------------------------------------------------
@@ -346,6 +569,22 @@ def notify_email(openings: list[Opening]) -> None:
 def discover(session, clubs: list[dict]) -> None:
     print("Verifying club hosts and finding booking IDs…\n")
     for club in clubs:
+        source = club.get("source", "miclub")
+        flag = "" if club.get("enabled", True) else "  [disabled]"
+
+        if source in ("teeitup", "golfnow"):
+            found, err = SOURCES[source](session, club, 2, 1, None, True)
+            if err:
+                print(f"  DEAD    {club['name']:<34} {err}")
+            elif not found:
+                print(f"  EMPTY   {club['name']:<34} reachable, nothing open in 2 days{flag}")
+            else:
+                labels = sorted({o.fee_label for o in found})
+                print(f"  OK      {club['name']}   ({source}, {len(found)} slots){flag}")
+                for lab in labels[:6]:
+                    print(f"            rate: {lab}")
+            continue
+
         host = club["host"].rstrip("/")
         html = get(session, f"{host}{CALENDAR_PATH}")
         if not html:
@@ -381,14 +620,18 @@ def main() -> int:
     args = p.parse_args()
 
     config = yaml.safe_load((ROOT / "clubs.yaml").read_text())
-    clubs = [c for c in config["clubs"]
-             if c.get("enabled", True) and c.get("drive_min", 0) <= args.max_drive]
-
     session = make_session()
 
+    # --discover deliberately ignores `enabled`: the whole point is to check a
+    # club before you switch it on, and a disabled club is exactly the one you
+    # need to verify.
     if args.discover:
-        discover(session, clubs)
+        discover(session, [c for c in config["clubs"]
+                           if c.get("drive_min", 0) <= args.max_drive])
         return 0
+
+    clubs = [c for c in config["clubs"]
+             if c.get("enabled", True) and c.get("drive_min", 0) <= args.max_drive]
 
     all_openings: list[Opening] = []
     problems: list[str] = []
