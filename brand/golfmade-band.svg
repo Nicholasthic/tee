@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 96" style="color:#2A2620">
+<!-- S&N Golf · golfmade-band · Shaft band
+     Two inks: #2A2620 / #7B2D26. Outline type before printing. -->
+<path d="M10 20H470M10 76H470" stroke="currentColor" stroke-width="3"/>
+    <path d="M10 27H470M10 69H470" stroke="currentColor" stroke-width="1.1"/>
+    <text x="240" y="56" font-family="Georgia,'Times New Roman',Times,serif" font-size="26"
+          font-weight="700" letter-spacing="5.2" text-anchor="middle" fill="currentColor">S&amp;N GOLF MADE</text>
+    <path d="M78 48 84 42 90 48 84 54Z" fill="#7B2D26"/>
+    <path d="M390 48 396 42 402 48 396 54Z" fill="#7B2D26"/>
+</svg>

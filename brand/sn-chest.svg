@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 250"
+     style="color:#43484E" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800">
+<!-- S&N Golf · sn-chest · Left chest — 75-90mm wide
+     Two inks: #43484E and #CE3226. Convert type to outlines before printing. -->
+<text x="24" y="26" font-size="12" font-weight="700" letter-spacing="4"
+          fill="currentColor" opacity=".55">HOLE</text>
+    <text x="416" y="26" font-size="12" font-weight="700" letter-spacing="4"
+          text-anchor="end" fill="currentColor" opacity=".55">PAR 72</text>
+    <g fill="none" stroke="currentColor" stroke-width="5">
+      <rect x="24" y="40" width="120" height="112" rx="6"/>
+      <rect x="160" y="40" width="120" height="112" rx="6"/>
+      <rect x="296" y="40" width="120" height="112" rx="6"/>
+    </g>
+    <text x="84" y="128" font-size="86" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">S</text>
+    <text x="220" y="128" font-size="86" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">&amp;</text>
+    <text x="356" y="128" font-size="86" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">N</text>
+    <!-- scrawled birdie ring: starts late, overshoots, doesn't quite close -->
+    <path d="M222 32C264 32 296 60 294 96 292 130 258 158 218 158 180 158 148 130 148 96 148 62 178 34 218 32 238 31 258 37 270 48"
+          fill="none" stroke="#CE3226" stroke-width="6" stroke-linecap="round"/>
+    <path d="M24 184H416" stroke="currentColor" stroke-width="2.5" opacity=".35"/>
+    <text x="220" y="212" font-size="17" font-weight="800" letter-spacing="1.6"
+          text-anchor="middle" fill="currentColor">BEERS · BOGEYS · BAD DECISIONS</text>
+    <text x="220" y="238" font-size="11.5" font-weight="700" letter-spacing="5.5"
+          text-anchor="middle" fill="currentColor" opacity=".6">S&amp;N GOLF · GOLD COAST</text>
+</svg>

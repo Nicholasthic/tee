@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 120" style="color:#C4441F" font-weight="800">
+<!-- S&N Golf Co. · Sunburnt · Chest hit — 90mm, one line
+     Two inks: #C4441F / #E8783C. Outline the type before printing. -->
+<g transform="translate(-8 0) skewX(-13)">
+      <g fill="#E8783C">
+        <rect x="92" y="16" width="188" height="8" rx="4"/>
+        <rect x="102" y="30" width="178" height="8" rx="4"/>
+      </g>
+      <text x="94" y="96" font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+            font-size="48" font-weight="800" letter-spacing="-2.4"
+            fill="currentColor">S&amp;N GOLF CO.</text>
+    </g>
+</svg>

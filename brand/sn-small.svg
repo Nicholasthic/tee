@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 170"
+     style="color:#43484E" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800">
+<!-- S&N Golf · sn-small · Cap / sleeve / embroidery
+     Two inks: #43484E and #CE3226. Convert type to outlines before printing. -->
+<g fill="none" stroke="currentColor" stroke-width="7">
+      <rect x="24" y="14" width="120" height="130" rx="7"/>
+      <rect x="160" y="14" width="120" height="130" rx="7"/>
+      <rect x="296" y="14" width="120" height="130" rx="7"/>
+    </g>
+    <text x="84" y="112" font-size="98" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">S</text>
+    <text x="220" y="112" font-size="98" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">&amp;</text>
+    <text x="356" y="112" font-size="98" font-weight="800" letter-spacing="-4"
+          text-anchor="middle" fill="currentColor">N</text>
+    <path d="M222 6C266 6 300 34 298 74 296 112 260 150 218 150 178 150 144 116 144 76 144 38 176 8 218 6"
+          fill="none" stroke="#CE3226" stroke-width="8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="color:#43484E" font-weight="800">
+<!-- S&N Golf · sn-round · Primary round mark — 28mm and up -->
+<path d="M52 7C74 8 92 26 92 49 92 73 74 92 50 92 27 92 8 74 8 50 8 27 26 8 49 7 62 6 73 11 80 19" fill="none" stroke="#CE3226"
+          stroke-width="6.5" stroke-linecap="round"/>
+    <text font-family="Helvetica Neue, Helvetica, Arial, sans-serif" x="50" y="52" font-size="27" font-weight="800" letter-spacing="-1.4"
+          text-anchor="middle" fill="currentColor">S&amp;N</text>
+    <path d="M32 60H68" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    <text font-family="Helvetica Neue, Helvetica, Arial, sans-serif" x="50" y="75" font-size="13.5" font-weight="800" letter-spacing="3.2"
+          text-anchor="middle" fill="currentColor">GOLF</text>
+</svg>
