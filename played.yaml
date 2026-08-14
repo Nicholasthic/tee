@@ -7,4 +7,43 @@
 #
 # Names must match `name` in clubs.yaml exactly; the build warns if one drifts.
 
+# Courses we never scan tee times for — private, resort, or just outside the
+# radius — but can still play. These show on the checklist only.
+#
+# drive_min values here are rough estimates from Nerang/Robina. Correct any
+# that are wrong; the list is only sorted by them.
+courses:
+  - name: Lakelands Golf Club
+    drive_min: 10
+    note: members and guests
+  - name: The Grand Golf Club
+    drive_min: 15
+    note: private
+  - name: Tallai Country Golf Club
+    drive_min: 15
+  - name: Boomerang Farm
+    drive_min: 15
+  - name: Burleigh Golf Club
+    drive_min: 20
+    note: private
+  - name: Lakeside Golf Club
+    drive_min: 20
+  - name: Helensvale Golf Club
+    drive_min: 20
+  - name: Links Hope Island
+    drive_min: 25
+    note: resort
+  - name: Sanctuary Cove — The Pines
+    drive_min: 25
+    note: members and resort guests
+  - name: Sanctuary Cove — The Palms
+    drive_min: 25
+    note: members and resort guests
+  - name: Tallebudgera Golf Club
+    drive_min: 25
+  - name: Tally Valley Golf Club
+    drive_min: 25
+  - name: Meadow Park Golf Club
+    drive_min: 25
+
 played: []

@@ -159,8 +159,21 @@ played:
   - Coolangatta & Tweed Heads
 ```
 
-Names must match `name` in `clubs.yaml` exactly; the build warns about any
-that don't. Courses marked `closed` or `unverified` are left off the list.
+The checklist is deliberately wider than the scan list. `clubs.yaml` only
+holds places we can pull tee times from, so private, resort and out-of-radius
+courses would never appear — but you can still play them. Add those under
+`courses:` in `played.yaml`:
+
+```yaml
+courses:
+  - name: Lakelands Golf Club
+    drive_min: 10
+    note: members and guests
+```
+
+They show on the checklist and are never scanned. Names ticked in `played:`
+must match a course exactly; the build warns on unknown names and on any
+course listed twice. Clubs marked `closed` or `unverified` are left off.
 
 ### Making ticks show on both phones
 

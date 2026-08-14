@@ -102,20 +102,41 @@ def collect_courses() -> list[dict]:
     played = set(record.get("played") or [])
 
     skip = {"closed", "unverified"}
-    known = {c["name"] for c in clubs}
-    for name in sorted(played - known):
-        print(f"  ! played.yaml lists unknown course {name!r}", file=sys.stderr)
+    # Why a club isn't scanned, in words the page can just print.
+    reasons = {"walking-only": "walking only", "chronogolf": "book by phone"}
 
     courses = [
         {
             "club": club["name"],
             "drive": club.get("drive_min", 0),
             "scanned": bool(club.get("enabled", True)),
-            "note": "" if club.get("enabled", True) else club.get("status", ""),
-            "done": club["name"] in played,
+            "note": "" if club.get("enabled", True)
+                    else reasons.get(club.get("status", ""), "not scanned"),
         }
         for club in clubs if club.get("status") not in skip
     ]
+
+    # Courses we never scan but can still play — private, resort, or simply
+    # outside the radius. The checklist is about rounds, not tee sheets.
+    for extra in record.get("courses") or []:
+        courses.append({
+            "club": extra["name"],
+            "drive": extra.get("drive_min", 0),
+            "scanned": False,
+            "note": extra.get("note", ""),
+        })
+
+    known = {c["club"] for c in courses}
+    for name in sorted(played - known):
+        print(f"  ! played.yaml ticks unknown course {name!r}", file=sys.stderr)
+
+    dupes = sorted({c["club"] for c in courses if
+                    [x["club"] for x in courses].count(c["club"]) > 1})
+    for name in dupes:
+        print(f"  ! {name!r} is listed twice", file=sys.stderr)
+
+    for c in courses:
+        c["done"] = c["club"] in played
     courses.sort(key=lambda c: (c["drive"], c["club"]))
     return courses
 
@@ -1171,8 +1192,7 @@ function renderCourses(){
   const rows = shown.map(c => {
     const on = hasPlayed(c.club);
     const bits = [c.drive + ' min'];
-    if (!c.scanned) bits.push(c.note === 'walking-only' ? 'walking only'
-                            : c.note === 'chronogolf' ? 'book by phone' : 'not scanned');
+    if (c.note) bits.push(c.note);
     return '<div class="course' + (on ? ' done' : '') + '">' +
       '<div class="info"><div class="nm">' + esc(c.club) + '</div>' +
       '<div class="sub2">' + esc(bits.join(' · ')) + '</div></div>' +
