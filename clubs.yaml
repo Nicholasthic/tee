@@ -9,6 +9,7 @@
 #         candidate  = unverified guess
 #         chronogolf = books via Chronogolf/Lightspeed; no adapter yet
 #         unlisted   = no public online tee sheet found; phone only
+#         walking-only = scans fine, but no cart rates; excluded by choice
 #         closed     = course no longer operating; kept so it isn't re-added
 #
 # drive_min is approximate from Nerang/Robina.
@@ -120,13 +121,15 @@ clubs:
     status: confirmed
     enabled: true
 
-  # Nine holes, eighteen tees — the 18-hole rate is a full round.
+  # Nine holes, eighteen tees. Scans fine via golfnow, but every bookable rate
+  # is walking only — no cart available — so it's off the page by choice, not
+  # because anything is broken. Set enabled: true to bring it back.
   - name: Tamborine Mountain
     source: golfnow
     facility_id: 16095
     drive_min: 40
-    status: confirmed
-    enabled: true
+    status: walking-only
+    enabled: false
 
   - name: Murwillumbah (NSW)
     host: https://murwillumbah.miclub.com.au

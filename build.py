@@ -83,15 +83,28 @@ def _cached_page() -> str:
     return OUT_FILE.read_text(encoding="utf-8")
 
 
-def cached_records() -> list[dict]:
+def cached_records(max_drive: int) -> list[dict]:
     """Re-read the records embedded in the last built page.
 
     Lets you iterate on the template without hammering the clubs again.
+    Records are re-filtered against clubs.yaml, so disabling a club and
+    rebuilding offline actually drops it instead of leaving stale rows on
+    the page.
     """
     m = re.search(r"const DATA = (\[.*?\]);", _cached_page(), re.S)
     if not m:
         raise SystemExit("could not find embedded data in docs/index.html")
-    return json.loads(m.group(1))
+    records = json.loads(m.group(1))
+
+    config = yaml.safe_load((ROOT / "clubs.yaml").read_text())
+    live = {c["name"] for c in config["clubs"]
+            if c.get("enabled", True) and c.get("drive_min", 0) <= max_drive}
+
+    kept = [r for r in records if r["club"] in live]
+    dropped = {r["club"] for r in records} - live
+    for name in sorted(dropped):
+        print(f"  dropped {name} (no longer enabled)", file=sys.stderr)
+    return kept
 
 
 def cached_built() -> str:
@@ -856,7 +869,7 @@ def main() -> int:
     args = p.parse_args()
 
     if args.offline:
-        records = cached_records()
+        records = cached_records(args.max_drive)
     else:
         openings, problems = collect(args.days, args.max_drive, args.all_fees)
         for msg in problems:
