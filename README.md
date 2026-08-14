@@ -175,20 +175,33 @@ They show on the checklist and are never scanned. Names ticked in `played:`
 must match a course exactly; the build warns on unknown names and on any
 course listed twice. Clubs marked `closed` or `unverified` are left off.
 
-### Making ticks show on both phones
+### Sharing the list between devices
 
-Out of the box a tick is saved on the device that made it, and the page gives
-you a `played:` block to paste into `played.yaml` and commit.
+**Reading is free.** `played.yaml` lives in a public repo, so every device
+pulls the shared list on load with no token and no setup. Open the page on any
+phone and you see the same ticks. Local ticks sit on top of it, and any the
+file has since caught up with stop counting as local.
 
-To skip that, turn on sync from the Courses tab. Each of you creates a
-**fine-grained personal access token** on GitHub — *Repository access: only
-this repo*, *Repository permissions to Contents: Read and write* — and pastes
-it into the page once on your own phone. Ticking then commits `played.yaml`
-directly, so both phones show the same list and every round is in git history.
+**Writing needs a token.** To have your ticks save for both of you, turn on
+sync from the Courses tab:
+
+1. Create a **fine-grained personal access token** at
+   <https://github.com/settings/personal-access-tokens/new>
+2. *Repository access* → **Only select repositories** → this repo
+3. *Repository permissions* → **Contents: Read and write**
+4. Paste it into the page once, on that device
+
+Ticking then commits `played.yaml` directly, so the other phone picks it up on
+its next load. Every round ends up in git history.
+
+Only one of you strictly needs a token — whoever does the ticking. For both to
+tick, **the second person must be a collaborator on the repo** (Settings →
+Collaborators) and use a token from their own GitHub account. Don't share one
+token between you.
 
 The token is stored in that browser's `localStorage` and is sent only to
-`api.github.com`. It never goes in the repo or the page. Revoke it on GitHub
-any time; the page falls back to per-device ticks.
+`api.github.com`. It never goes in the repo or the page. Revoke it any time and
+the page falls back to read-only sharing.
 
 Ticks are optimistic: the box flips immediately and the commit happens after.
 If the commit fails the tick is kept locally and the bar shows why, so you

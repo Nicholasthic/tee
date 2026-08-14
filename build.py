@@ -1051,7 +1051,7 @@ const drifted = () => COURSES.map(c => c.club).filter(c => local[c] !== undefine
    straight to the repo instead, so both phones see the same list. The token
    is kept in this browser and sent only to api.github.com. */
 const FILE = 'played.yaml';
-let sync = { state: REPO ? 'off' : 'unavailable', sha: null, msg: '', at: 0 };
+let sync = { state: REPO ? 'off' : 'unavailable', sha: null, msg: '', at: 0, pulled: false };
 
 const getToken = () => { try { return localStorage.getItem('tee.gh') || ''; } catch (e) { return ''; } };
 const setToken = v => {
@@ -1105,14 +1105,37 @@ async function gh(path, opts){
   return r.json();
 }
 
-/* Adopt the committed file as the new baseline and clear local overrides,
-   so the two devices converge instead of each keeping a private diff. */
-function adopt(list){
+/* Take the committed file as the new baseline. Local ticks are kept on top —
+   any that the file now agrees with stop counting as a local change. */
+function adoptBase(list){
   const set = {};
   list.forEach(name => { set[name] = true; });
-  COURSES.forEach(c => { BASE[c.club] = !!set[c.club]; });
-  local = {};
+  COURSES.forEach(c => {
+    BASE[c.club] = !!set[c.club];
+    if (local[c.club] !== undefined && local[c.club] === BASE[c.club]) delete local[c.club];
+  });
   saveLocal();
+}
+
+/* Adopt and drop local overrides entirely — used after our own write, where
+   the file is now authoritative for this device. */
+function adopt(list){
+  local = {};
+  adoptBase(list);
+}
+
+/* played.yaml is in a public repo, so the shared list can be read with no
+   token at all. Only writing one needs credentials. */
+async function pullPublic(){
+  if (!REPO) return;
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/' + REPO +
+                          '/main/' + FILE + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    adoptBase(parsePlayedYaml(await r.text()));
+    sync.pulled = true;
+    render();
+  } catch (e) { /* offline, or the file is not there yet — keep what we have */ }
 }
 
 async function pull(){
@@ -1233,10 +1256,11 @@ function renderCourses(){
 function syncBar(){
   if (sync.state === 'unavailable') return '';
   const on = !!getToken();
-  const label = !on ? 'Ticks save on this device only'
-    : sync.state === 'busy' ? 'Saving…'
+  const label = sync.state === 'busy' ? 'Saving…'
     : sync.state === 'error' ? ('Sync failed — ' + esc(sync.msg))
-    : 'Synced with Scott';
+    : on ? 'Synced — your ticks save for both of you'
+    : sync.pulled ? 'Showing the shared list · your ticks stay on this device'
+    : 'Ticks save on this device only';
   const cls = sync.state === 'error' ? ' bad' : (on ? ' good' : '');
   return '<div class="syncbar' + cls + '">' +
     '<span class="dot"></span><span>' + label + '</span>' +
@@ -1347,8 +1371,9 @@ function render(){
 
 $('built').textContent = ago(BUILT);
 render();
-// pick up anything the other phone ticked since this page was built
-if (getToken() && REPO) pull();
+// The shared list reads without a token, so both phones see the same ticks.
+// A token is only needed to write one.
+if (getToken() && REPO) pull(); else pullPublic();
 </script>
 </body></html>
 """
