@@ -77,6 +77,17 @@ def collect_contacts(max_drive: int) -> list[dict]:
     return out
 
 
+def repo_slug() -> str:
+    """owner/repo, so the page can commit played.yaml back to this repo."""
+    try:
+        url = subprocess.run(["git", "remote", "get-url", "origin"], cwd=ROOT,
+                             capture_output=True, text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+    m = re.search(r"github\.com[:/]([^/]+/[^/.]+?)(?:\.git)?$", url)
+    return m.group(1) if m else ""
+
+
 def collect_courses() -> list[dict]:
     """Every real course in the registry, and whether the pair has played it.
 
@@ -309,6 +320,40 @@ TEMPLATE = """<!doctype html>
   .score .num small{font-size:13px; font-weight:500; color:var(--faint)}
   .meter{height:5px; border-radius:99px; background:var(--surface2); margin-top:8px; overflow:hidden}
   .meter i{display:block; height:100%; background:var(--accent); border-radius:99px}
+
+  .syncbar{
+    display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:10px 13px; margin-top:18px;
+    font-size:12.5px; color:var(--dim);
+  }
+  .syncbar .dot{width:7px; height:7px; border-radius:50%; background:var(--border2); flex:none}
+  .syncbar.good .dot{background:var(--accent)}
+  .syncbar.bad{border-color:var(--flag); color:var(--flag)}
+  .syncbar.bad .dot{background:var(--flag)}
+  .syncbar > button{
+    margin-left:auto; font:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    background:transparent; color:var(--accent); border:1px solid var(--accent-line);
+    border-radius:9px; padding:5px 11px;
+  }
+  .syncpanel{flex-basis:100%; border-top:1px solid var(--border); padding-top:11px; margin-top:2px}
+  .syncpanel p{font-size:12px; color:var(--dim); margin-bottom:8px; line-height:1.5}
+  .syncpanel p b{color:var(--text); font-weight:600}
+  .syncpanel input{
+    width:100%; font:inherit; font-size:12.5px; padding:8px 10px;
+    background:var(--bg); color:var(--text);
+    border:1px solid var(--border2); border-radius:9px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .syncacts{display:flex; align-items:center; gap:8px; margin-top:9px; flex-wrap:wrap}
+  .syncacts button{
+    font:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); border:0;
+    border-radius:9px; padding:7px 13px;
+  }
+  .syncacts button.ghost{background:transparent; color:var(--flag);
+                          border:1px solid var(--border2)}
+  .syncacts a{font-size:12px; color:var(--dim); margin-left:auto}
 
   .onlys{display:flex; gap:6px; margin-top:16px; flex-wrap:wrap}
   .chip{
@@ -653,6 +698,7 @@ TEMPLATE = """<!doctype html>
 const DATA = __DATA__;
 const CONTACTS = __CONTACTS__;
 const COURSES = __COURSES__;
+const REPO = "__REPO__";
 const BUILT = "__BUILT__";
 
 /* ---------- helpers ---------- */
@@ -973,9 +1019,122 @@ function togglePlayed(club){
   if (now === !!BASE[club]) delete local[club]; else local[club] = now;
   saveLocal();
   render();
+  if (getToken() && REPO) push();   // optimistic: the tick is already shown
 }
 
 const drifted = () => COURSES.map(c => c.club).filter(c => local[c] !== undefined);
+
+/* ---------- optional sync ----------
+   With no token the page behaves exactly as before: ticks are this device
+   only. Paste a fine-grained GitHub token and ticking commits played.yaml
+   straight to the repo instead, so both phones see the same list. The token
+   is kept in this browser and sent only to api.github.com. */
+const FILE = 'played.yaml';
+let sync = { state: REPO ? 'off' : 'unavailable', sha: null, msg: '', at: 0 };
+
+const getToken = () => { try { return localStorage.getItem('tee.gh') || ''; } catch (e) { return ''; } };
+const setToken = v => {
+  try { v ? localStorage.setItem('tee.gh', v) : localStorage.removeItem('tee.gh'); } catch (e) {}
+};
+
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+function b64decode(b64){
+  const bin = atob(b64.replace(/[^A-Za-z0-9+/=]/g, ''));
+  return new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0)));
+}
+
+function parsePlayedYaml(text){
+  const out = [];
+  let inList = false;
+  text.split(String.fromCharCode(10)).forEach(raw => {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) return;
+    if (line.startsWith('played:')){ inList = true; return; }
+    if (!inList) return;
+    if (line.startsWith('- ')){
+      const v = line.slice(2).trim();
+      out.push(v.startsWith('"') ? JSON.parse(v) : v);
+    } else inList = false;
+  });
+  return out;
+}
+
+/* keep the file's comment header, replace only the played: block */
+function serializePlayedYaml(original){
+  const nl = String.fromCharCode(10);
+  const lines = original.split(nl);
+  let i = lines.length;
+  for (let k = 0; k < lines.length; k++) if (lines[k].startsWith('played:')){ i = k; break; }
+  return lines.slice(0, i).concat(playedYaml().split(nl)).join(nl) + nl;
+}
+
+async function gh(path, opts){
+  const r = await fetch('https://api.github.com/repos/' + REPO + '/contents/' + path, Object.assign({
+    headers: {
+      'Authorization': 'Bearer ' + getToken(),
+      'Accept': 'application/vnd.github+json',
+    },
+  }, opts || {}));
+  if (!r.ok) throw new Error('GitHub ' + r.status + (r.status === 401 ? ' (token rejected)' : ''));
+  return r.json();
+}
+
+/* Adopt the committed file as the new baseline and clear local overrides,
+   so the two devices converge instead of each keeping a private diff. */
+function adopt(list){
+  const set = {};
+  list.forEach(name => { set[name] = true; });
+  COURSES.forEach(c => { BASE[c.club] = !!set[c.club]; });
+  local = {};
+  saveLocal();
+}
+
+async function pull(){
+  if (!getToken() || !REPO) return;
+  sync.state = 'busy'; renderSyncOnly();
+  try {
+    const data = await gh(FILE);
+    sync.sha = data.sha;
+    adopt(parsePlayedYaml(b64decode(data.content || '')));
+    sync.state = 'ok'; sync.at = Date.now(); sync.msg = '';
+  } catch (e) {
+    sync.state = 'error'; sync.msg = e.message;
+  }
+  render();
+}
+
+async function push(){
+  if (!getToken() || !REPO) return;
+  sync.state = 'busy'; sync.msg = ''; renderSyncOnly();
+  try {
+    const current = await gh(FILE);                   // re-read for the latest sha
+    const merged = serializePlayedYaml(b64decode(current.content || ''));
+    const saved = await gh(FILE, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + getToken(),
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'played: ' + playedCount() + ' of ' + COURSES.length,
+        content: b64encode(merged),
+        sha: current.sha,
+      }),
+    });
+    sync.sha = saved.content && saved.content.sha;
+    adopt(parsePlayedYaml(merged));
+    sync.state = 'ok'; sync.at = Date.now();
+  } catch (e) {
+    sync.state = 'error'; sync.msg = e.message;   // the tick survives locally
+  }
+  render();
+}
 
 function playedYaml(){
   const done = COURSES.filter(c => hasPlayed(c.club)).map(c => c.club);
@@ -1022,22 +1181,26 @@ function renderCourses(){
       (on ? 'Played' : 'Not yet') + '</button></div></div>';
   }).join('');
 
+  // With sync on, a tick is committed for both of you, so there is nothing to
+  // paste. The export block is only the fallback for the unsynced case.
   const changed = drifted();
-  const banner = changed.length
+  const banner = (changed.length && !getToken())
     ? '<div class="unsaved"><span><b>' + changed.length +
       (changed.length === 1 ? ' change' : ' changes') + ' on this device only.</b> ' +
-      'Paste into played.yaml and commit so it shows for both of you.</span>' +
+      'Turn on sync above, or paste this into played.yaml and commit.</span>' +
       '<button type="button" id="exportbtn">Copy for played.yaml</button>' +
       '<textarea class="yaml" id="yamlout" readonly>' + esc(playedYaml()) + '</textarea></div>'
     : '';
 
-  el.innerHTML = '<div class="scoreboard">' + summary + '</div>' +
+  el.innerHTML = syncBar() +
+                 '<div class="scoreboard">' + summary + '</div>' +
                  '<div class="strip onlys">' + chips + '</div>' +
                  '<div class="courses">' + rows +
                  (shown.length ? '' : '<div class="empty"><h3>Nothing here</h3></div>') +
                  '</div>' + banner;
 
-  if (changed.length){
+  wireSync();
+  if (changed.length && !getToken()){
     $('exportbtn').onclick = () => {
       const box = $('yamlout');
       box.select();
@@ -1045,6 +1208,61 @@ function renderCourses(){
       $('exportbtn').textContent = 'Copied';
     };
   }
+}
+
+function syncBar(){
+  if (sync.state === 'unavailable') return '';
+  const on = !!getToken();
+  const label = !on ? 'Ticks save on this device only'
+    : sync.state === 'busy' ? 'Saving…'
+    : sync.state === 'error' ? ('Sync failed — ' + esc(sync.msg))
+    : 'Synced with Scott';
+  const cls = sync.state === 'error' ? ' bad' : (on ? ' good' : '');
+  return '<div class="syncbar' + cls + '">' +
+    '<span class="dot"></span><span>' + label + '</span>' +
+    '<button type="button" id="syncbtn">' + (on ? 'Sync settings' : 'Turn on sync') + '</button>' +
+    '<div class="syncpanel" id="syncpanel" hidden>' +
+      '<p>Ticking will commit <b>played.yaml</b> to <b>' + esc(REPO) + '</b>, so both phones show the same list.</p>' +
+      '<p>Create a <b>fine-grained personal access token</b> on GitHub with ' +
+      '<b>Repository access: only ' + esc(REPO) + '</b> and <b>Repository permissions ' +
+      'to Contents: Read and write</b>. Paste it below. It is stored in this ' +
+      'browser only, is sent only to api.github.com, and you can revoke it any time.</p>' +
+      '<input type="password" id="ghtoken" placeholder="github_pat_..." autocomplete="off" ' +
+      'spellcheck="false" value="' + (on ? '' : '') + '">' +
+      '<div class="syncacts">' +
+        '<button type="button" id="ghsave">Save token</button>' +
+        (on ? '<button type="button" id="ghclear" class="ghost">Remove token</button>' : '') +
+        '<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a token</a>' +
+      '</div>' +
+    '</div></div>';
+}
+
+function wireSync(){
+  const btn = $('syncbtn');
+  if (!btn) return;
+  btn.onclick = () => { const p = $('syncpanel'); p.hidden = !p.hidden; };
+  $('ghsave').onclick = () => {
+    const v = $('ghtoken').value.trim();
+    if (!v) return;
+    setToken(v);
+    $('ghtoken').value = '';
+    pull();                       // adopt whatever is already committed
+  };
+  if ($('ghclear')) $('ghclear').onclick = () => {
+    setToken('');
+    sync.state = 'off'; sync.msg = '';
+    render();
+  };
+}
+
+/* repaint just the status line while a request is in flight */
+function renderSyncOnly(){
+  const bar = document.querySelector('.syncbar');
+  if (!bar) return;
+  const open = $('syncpanel') && !$('syncpanel').hidden;
+  bar.outerHTML = syncBar();
+  wireSync();
+  if (open && $('syncpanel')) $('syncpanel').hidden = false;
 }
 
 function renderTabs(){
@@ -1109,6 +1327,8 @@ function render(){
 
 $('built').textContent = ago(BUILT);
 render();
+// pick up anything the other phone ticked since this page was built
+if (getToken() && REPO) pull();
 </script>
 </body></html>
 """
@@ -1151,6 +1371,7 @@ def main() -> int:
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
             .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
             .replace("__COURSES__", json.dumps(courses, separators=(",", ":")))
+            .replace("__REPO__", repo_slug())
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
             .replace("__DRIVE__", str(args.max_drive)))

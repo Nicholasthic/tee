@@ -162,14 +162,29 @@ played:
 Names must match `name` in `clubs.yaml` exactly; the build warns about any
 that don't. Courses marked `closed` or `unverified` are left off the list.
 
-**There's no backend, so a tick is only saved on the device that made it.**
-Ticking writes to `localStorage` and the page then shows a banner with a
-ready-made `played:` block — paste that into `played.yaml` and commit to make
-it visible to the other person. The banner disappears once your ticks match
-the committed file, so it doubles as "you have unsaved changes".
+### Making ticks show on both phones
 
-If you'd rather it just sync, that needs somewhere to store state — a tiny
-API, a gist, or a Google Sheet. Worth doing only if pasting YAML gets annoying.
+Out of the box a tick is saved on the device that made it, and the page gives
+you a `played:` block to paste into `played.yaml` and commit.
+
+To skip that, turn on sync from the Courses tab. Each of you creates a
+**fine-grained personal access token** on GitHub — *Repository access: only
+this repo*, *Repository permissions to Contents: Read and write* — and pastes
+it into the page once on your own phone. Ticking then commits `played.yaml`
+directly, so both phones show the same list and every round is in git history.
+
+The token is stored in that browser's `localStorage` and is sent only to
+`api.github.com`. It never goes in the repo or the page. Revoke it on GitHub
+any time; the page falls back to per-device ticks.
+
+Ticks are optimistic: the box flips immediately and the commit happens after.
+If the commit fails the tick is kept locally and the bar shows why, so you
+don't lose it.
+
+There's no free no-auth JSON store worth relying on any more — jsonblob,
+textdb, kvdb and extendsclass were all either Cloudflare-blocked, dead, or
+require an account. ntfy works and has CORS, but free topics only retain
+messages for 12 hours, so it can't hold state.
 
 ---
 
