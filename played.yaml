@@ -23,6 +23,7 @@ courses:
     drive_min: 15
   - name: Boomerang Farm
     drive_min: 15
+    note: 9 holes
   - name: Burleigh Golf Club
     drive_min: 20
     note: private
@@ -43,7 +44,25 @@ courses:
     drive_min: 25
   - name: Tally Valley Golf Club
     drive_min: 25
+    note: 9 holes
   - name: Meadow Park Golf Club
     drive_min: 25
+  - name: Burleigh Palms Golf Club
+    drive_min: 25
+    note: 9 holes
+  - name: Club Banora (NSW)
+    drive_min: 30
+  - name: Canungra Area Golf Club
+    drive_min: 30
+  - name: Chinderah Golf Course (NSW)
+    drive_min: 35
+  - name: Cabarita Beach Golf Club (NSW)
+    drive_min: 40
+    note: 9 holes
+  - name: Pottsville Golf Course (NSW)
+    drive_min: 45
+    note: 9 holes
+  - name: Beaudesert Golf Club
+    drive_min: 50
 
 played: []
