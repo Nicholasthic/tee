@@ -77,8 +77,8 @@ def collect_contacts(max_drive: int) -> list[dict]:
     return out
 
 
-def collect_courses() -> tuple[list[dict], list[dict]]:
-    """Every real course in the registry, plus who has played it.
+def collect_courses() -> list[dict]:
+    """Every real course in the registry, and whether the pair has played it.
 
     Includes clubs the scanner can't reach — Southport books by phone, and
     Tamborine is walking-only — because you can still go and play them. Only
@@ -88,28 +88,25 @@ def collect_courses() -> tuple[list[dict], list[dict]]:
 
     played_file = ROOT / "played.yaml"
     record = yaml.safe_load(played_file.read_text()) if played_file.exists() else {}
-    golfers = record.get("golfers") or []
-    played = record.get("played") or {}
+    played = set(record.get("played") or [])
 
     skip = {"closed", "unverified"}
     known = {c["name"] for c in clubs}
-    for name in sorted(set(played) - known):
+    for name in sorted(played - known):
         print(f"  ! played.yaml lists unknown course {name!r}", file=sys.stderr)
 
-    courses = []
-    for club in clubs:
-        if club.get("status") in skip:
-            continue
-        courses.append({
+    courses = [
+        {
             "club": club["name"],
             "drive": club.get("drive_min", 0),
             "scanned": bool(club.get("enabled", True)),
             "note": "" if club.get("enabled", True) else club.get("status", ""),
-            "by": [g for g in (played.get(club["name"]) or [])],
-        })
-
+            "done": club["name"] in played,
+        }
+        for club in clubs if club.get("status") not in skip
+    ]
     courses.sort(key=lambda c: (c["drive"], c["club"]))
-    return courses, golfers
+    return courses
 
 
 def _cached_page() -> str:
@@ -312,6 +309,17 @@ TEMPLATE = """<!doctype html>
   .score .num small{font-size:13px; font-weight:500; color:var(--faint)}
   .meter{height:5px; border-radius:99px; background:var(--surface2); margin-top:8px; overflow:hidden}
   .meter i{display:block; height:100%; background:var(--accent); border-radius:99px}
+
+  .onlys{display:flex; gap:6px; margin-top:16px; flex-wrap:wrap}
+  .chip{
+    font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface); color:var(--dim);
+    border-radius:999px; padding:6px 12px;
+  }
+  .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent);
+                              color:var(--accent-ink)}
+  .chip .tally{margin-left:6px; opacity:.6; font-weight:500;
+               font-variant-numeric:tabular-nums}
 
   .courses{display:flex; flex-direction:column; gap:8px; margin-top:14px}
   .course{
@@ -645,7 +653,6 @@ TEMPLATE = """<!doctype html>
 const DATA = __DATA__;
 const CONTACTS = __CONTACTS__;
 const COURSES = __COURSES__;
-const GOLFERS = __GOLFERS__;
 const BUILT = "__BUILT__";
 
 /* ---------- helpers ---------- */
@@ -692,7 +699,7 @@ const SORTS = [['time','Earliest'], ['drive','Closest'], ['count','Most open']];
 const CHIP_LIMIT = 8;
 
 const DEFAULTS = { day:'all', players:4, tmin:T_LO, tmax:T_HI, drive:D_HI, sort:'time',
-                   view:'times' };
+                   view:'times', only:'all' };
 const state = Object.assign({}, DEFAULTS, restore());
 const expanded = new Set();
 
@@ -704,6 +711,7 @@ function restore(){
     if (PLAYERS.indexOf(s.players) > -1) out.players = s.players;
     if (SORTS.some(x => x[0] === s.sort)) out.sort = s.sort;
     if (s.view === 'times' || s.view === 'courses') out.view = s.view;
+    if (['all','todo','done'].indexOf(s.only) > -1) out.only = s.only;
     if (typeof s.tmin === 'number') out.tmin = Math.min(Math.max(s.tmin, T_LO), T_HI);
     if (typeof s.tmax === 'number') out.tmax = Math.min(Math.max(s.tmax, T_LO), T_HI);
     if (out.tmin > out.tmax) { delete out.tmin; delete out.tmax; }
@@ -783,8 +791,10 @@ $('list').onclick = e => {
 };
 
 $('coursesview').onclick = e => {
-  const b = e.target.closest('.tick');
-  if (b) togglePlayed(b.dataset.club, b.dataset.who);
+  const t = e.target.closest('.tick');
+  if (t) { togglePlayed(t.dataset.club); return; }
+  const c = e.target.closest('.chip');
+  if (c) { state.only = c.dataset.only; render(); }
 };
 
 document.addEventListener('keydown', e => {
@@ -944,26 +954,23 @@ function renderList(){
 }
 
 /* ---------- courses played ----------
-   played.yaml is the shared record; ticks made here are this device only
-   until they are pasted back and committed, so the two are tracked apart
-   and the difference is surfaced rather than hidden. */
+   One list for the pair: either you have played it together or you have not.
+   played.yaml is the shared record; ticks made here live on this device only
+   until they are pasted back and committed, so local state is tracked as a
+   diff against the file rather than pretending to sync. */
 const BASE = {};
-COURSES.forEach(c => { BASE[c.club] = (c.by || []).slice().sort(); });
+COURSES.forEach(c => { BASE[c.club] = !!c.done; });
 
 let local = {};
 try { local = JSON.parse(localStorage.getItem('tee.played') || '{}'); } catch (e) { local = {}; }
 
 const saveLocal = () => { try { localStorage.setItem('tee.played', JSON.stringify(local)); } catch (e) {} };
-const whoPlayed = club => (local[club] !== undefined ? local[club] : BASE[club] || []);
-const hasPlayed = (club, id) => whoPlayed(club).indexOf(id) > -1;
-const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+const hasPlayed = club => (local[club] !== undefined ? local[club] : !!BASE[club]);
+const playedCount = () => COURSES.filter(c => hasPlayed(c.club)).length;
 
-function togglePlayed(club, id){
-  const now = whoPlayed(club).slice();
-  const i = now.indexOf(id);
-  if (i > -1) now.splice(i, 1); else now.push(id);
-  now.sort();
-  if (same(now, BASE[club] || [])) delete local[club]; else local[club] = now;
+function togglePlayed(club){
+  const now = !hasPlayed(club);
+  if (now === !!BASE[club]) delete local[club]; else local[club] = now;
   saveLocal();
   render();
 }
@@ -971,64 +978,64 @@ function togglePlayed(club, id){
 const drifted = () => COURSES.map(c => c.club).filter(c => local[c] !== undefined);
 
 function playedYaml(){
-  const lines = ['played:'];
-  const entries = COURSES
-    .map(c => [c.club, whoPlayed(c.club)])
-    .filter(([, who]) => who.length);
-  if (!entries.length) return 'played: {}';
-  entries.forEach(([club, who]) => {
-    const key = /^[A-Za-z][A-Za-z0-9 ()/&.-]*$/.test(club) ? club : JSON.stringify(club);
-    lines.push('  ' + key + ': [' + who.join(', ') + ']');
-  });
-  return lines.join(String.fromCharCode(10));
+  const done = COURSES.filter(c => hasPlayed(c.club)).map(c => c.club);
+  if (!done.length) return 'played: []';
+  const nl = String.fromCharCode(10);
+  return 'played:' + nl + done.map(club => {
+    const safe = /^[A-Za-z][A-Za-z0-9 ()&.-]*$/.test(club) ? club : JSON.stringify(club);
+    return '  - ' + safe;
+  }).join(nl);
 }
 
 function renderCourses(){
   const el = $('coursesview');
   const tick = '<svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+  const done = playedCount(), total = COURSES.length, left = total - done;
+  const pctDone = total ? Math.round((done / total) * 100) : 0;
 
-  const boards = GOLFERS.map(g => {
-    const n = COURSES.filter(c => hasPlayed(c.club, g.id)).length;
-    const pctDone = COURSES.length ? Math.round((n / COURSES.length) * 100) : 0;
-    return '<div class="score"><div class="who">' + esc(g.name) + '</div>' +
-      '<div class="num">' + n + ' <small>of ' + COURSES.length + '</small></div>' +
-      '<div class="meter"><i style="width:' + pctDone + '%"></i></div></div>';
-  }).join('');
+  const summary =
+    '<div class="score"><div class="who">Played</div>' +
+      '<div class="num">' + done + ' <small>of ' + total + '</small></div>' +
+      '<div class="meter"><i style="width:' + pctDone + '%"></i></div></div>' +
+    '<div class="score"><div class="who">Still to play</div>' +
+      '<div class="num">' + left + ' <small>course' + (left === 1 ? '' : 's') + ' left</small></div>' +
+      '<div class="meter"><i style="width:' + (100 - pctDone) + '%"></i></div></div>';
 
-  const bothCount = COURSES.filter(c => GOLFERS.every(g => hasPlayed(c.club, g.id))).length;
-  const noneCount = COURSES.filter(c => !whoPlayed(c.club).length).length;
-  const summary = '<div class="score"><div class="who">Together</div>' +
-    '<div class="num">' + bothCount + ' <small>both · ' + noneCount + ' still to play</small></div>' +
-    '<div class="meter"><i style="width:' +
-    (COURSES.length ? Math.round((bothCount / COURSES.length) * 100) : 0) + '%"></i></div></div>';
+  const shown = COURSES.filter(c =>
+    state.only === 'all' || (state.only === 'done' ? hasPlayed(c.club) : !hasPlayed(c.club)));
 
-  const rows = COURSES.map(c => {
-    const who = whoPlayed(c.club);
-    const all = GOLFERS.length && GOLFERS.every(g => who.indexOf(g.id) > -1);
+  const chips = [['all', 'All', total], ['todo', 'To play', left], ['done', 'Played', done]]
+    .map(([k, label, n]) => '<button class="chip" type="button" data-only="' + k + '"' +
+      ' aria-pressed="' + (state.only === k) + '">' + label +
+      '<span class="tally">' + n + '</span></button>').join('');
+
+  const rows = shown.map(c => {
+    const on = hasPlayed(c.club);
     const bits = [c.drive + ' min'];
     if (!c.scanned) bits.push(c.note === 'walking-only' ? 'walking only'
                             : c.note === 'chronogolf' ? 'book by phone' : 'not scanned');
-    return '<div class="course' + (all ? ' done' : '') + '">' +
+    return '<div class="course' + (on ? ' done' : '') + '">' +
       '<div class="info"><div class="nm">' + esc(c.club) + '</div>' +
       '<div class="sub2">' + esc(bits.join(' · ')) + '</div></div>' +
-      '<div class="ticks">' + GOLFERS.map(g =>
-        '<button class="tick" type="button" data-club="' + esc(c.club) + '" data-who="' + esc(g.id) + '"' +
-        ' aria-pressed="' + (who.indexOf(g.id) > -1) + '">' +
-        '<span class="box">' + tick + '</span>' + esc(g.name) + '</button>').join('') +
-      '</div></div>';
+      '<div class="ticks"><button class="tick" type="button" data-club="' + esc(c.club) + '"' +
+      ' aria-pressed="' + on + '"><span class="box">' + tick + '</span>' +
+      (on ? 'Played' : 'Not yet') + '</button></div></div>';
   }).join('');
 
   const changed = drifted();
   const banner = changed.length
     ? '<div class="unsaved"><span><b>' + changed.length +
-      (changed.length === 1 ? ' course' : ' courses') + ' ticked on this device only.</b> ' +
+      (changed.length === 1 ? ' change' : ' changes') + ' on this device only.</b> ' +
       'Paste into played.yaml and commit so it shows for both of you.</span>' +
       '<button type="button" id="exportbtn">Copy for played.yaml</button>' +
       '<textarea class="yaml" id="yamlout" readonly>' + esc(playedYaml()) + '</textarea></div>'
     : '';
 
-  el.innerHTML = '<div class="scoreboard">' + boards + summary + '</div>' +
-                 '<div class="courses">' + rows + '</div>' + banner;
+  el.innerHTML = '<div class="scoreboard">' + summary + '</div>' +
+                 '<div class="strip onlys">' + chips + '</div>' +
+                 '<div class="courses">' + rows +
+                 (shown.length ? '' : '<div class="empty"><h3>Nothing here</h3></div>') +
+                 '</div>' + banner;
 
   if (changed.length){
     $('exportbtn').onclick = () => {
@@ -1042,7 +1049,7 @@ function renderCourses(){
 
 function renderTabs(){
   const el = $('tabs');
-  const left = COURSES.filter(c => !whoPlayed(c.club).length).length;
+  const left = COURSES.filter(c => !hasPlayed(c.club)).length;
   const defs = [['times', 'Tee times', DATA.length.toLocaleString()],
                 ['courses', 'Courses', left + ' to play']];
   el.innerHTML = '';
@@ -1136,15 +1143,14 @@ def main() -> int:
     if contacts:
         print(f"{len(contacts)} call-to-book clubs", file=sys.stderr)
 
-    courses, golfers = collect_courses()
-    ticked = sum(1 for c in courses if c["by"])
+    courses = collect_courses()
+    ticked = sum(1 for c in courses if c["done"])
     print(f"{len(courses)} courses on the checklist, {ticked} played", file=sys.stderr)
 
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
             .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
             .replace("__COURSES__", json.dumps(courses, separators=(",", ":")))
-            .replace("__GOLFERS__", json.dumps(golfers, separators=(",", ":")))
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
             .replace("__DRIVE__", str(args.max_drive)))

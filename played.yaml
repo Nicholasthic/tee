@@ -1,17 +1,10 @@
-# Who has played what.
+# Courses Scott and Nick have played.
 #
-# This file is the shared record — it's what both of you see when the page is
-# rebuilt. Ticking a box on the page saves to that device only; use the "Copy
-# for played.yaml" button there, paste the result below, and commit it to make
-# a tick visible to the other person.
+# This is the shared record — it's what both of you see when the page is
+# rebuilt. Ticking on the page saves to that device only; use the "Copy for
+# played.yaml" button there, paste the list below, and commit it so the tick
+# shows for the other person too.
 #
-# Course names must match `name` in clubs.yaml exactly.
+# Names must match `name` in clubs.yaml exactly; the build warns if one drifts.
 
-golfers:
-  - id: scott
-    name: Scott
-  - id: nick
-    name: Nick
-
-# course name: [list of golfer ids who have played it]
-played: {}
+played: []
