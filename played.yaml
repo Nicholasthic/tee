@@ -65,4 +65,5 @@ courses:
   - name: Beaudesert Golf Club
     drive_min: 50
 
-played: []
+played:
+  - Palmer Colonial
