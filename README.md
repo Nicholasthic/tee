@@ -142,6 +142,42 @@ no card at all.
 
 ---
 
+## Courses played
+
+The page has two tabs: **Tee times** and **Courses**. The Courses tab is a
+checklist of every real course in `clubs.yaml` — including the ones the
+scanner can't reach, since you can still go and play them — with a tick per
+golfer and a count of what's left.
+
+`played.yaml` is the shared record:
+
+```yaml
+golfers:
+  - id: scott
+    name: Scott
+  - id: nick
+    name: Nick
+
+played:
+  Palmer Colonial: [nick, scott]
+  The Glades: [nick]
+```
+
+Course names must match `name` in `clubs.yaml` exactly; the build warns about
+any that don't. Courses marked `closed` or `unverified` are left off the list.
+
+**There's no backend, so a tick is only saved on the device that made it.**
+Ticking writes to `localStorage` and the page then shows a banner with a ready
+-made `played:` block — paste that into `played.yaml` and commit to make it
+visible to the other person. Until you do, the two of you see different
+checklists. The banner disappears once your ticks match the committed file, so
+it doubles as "you have unsaved changes".
+
+If you'd rather it just sync, that needs somewhere to store state — a tiny
+API, a gist, or a Google Sheet. Worth doing only if pasting YAML gets annoying.
+
+---
+
 ## The page
 
 `build.py` scans every club and writes a single self-contained `docs/index.html` — no

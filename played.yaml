@@ -1,0 +1,17 @@
+# Who has played what.
+#
+# This file is the shared record — it's what both of you see when the page is
+# rebuilt. Ticking a box on the page saves to that device only; use the "Copy
+# for played.yaml" button there, paste the result below, and commit it to make
+# a tick visible to the other person.
+#
+# Course names must match `name` in clubs.yaml exactly.
+
+golfers:
+  - id: scott
+    name: Scott
+  - id: nick
+    name: Nick
+
+# course name: [list of golfer ids who have played it]
+played: {}

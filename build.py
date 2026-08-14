@@ -77,6 +77,41 @@ def collect_contacts(max_drive: int) -> list[dict]:
     return out
 
 
+def collect_courses() -> tuple[list[dict], list[dict]]:
+    """Every real course in the registry, plus who has played it.
+
+    Includes clubs the scanner can't reach — Southport books by phone, and
+    Tamborine is walking-only — because you can still go and play them. Only
+    courses that don't exist or aren't confirmed to are left out.
+    """
+    clubs = yaml.safe_load((ROOT / "clubs.yaml").read_text())["clubs"]
+
+    played_file = ROOT / "played.yaml"
+    record = yaml.safe_load(played_file.read_text()) if played_file.exists() else {}
+    golfers = record.get("golfers") or []
+    played = record.get("played") or {}
+
+    skip = {"closed", "unverified"}
+    known = {c["name"] for c in clubs}
+    for name in sorted(set(played) - known):
+        print(f"  ! played.yaml lists unknown course {name!r}", file=sys.stderr)
+
+    courses = []
+    for club in clubs:
+        if club.get("status") in skip:
+            continue
+        courses.append({
+            "club": club["name"],
+            "drive": club.get("drive_min", 0),
+            "scanned": bool(club.get("enabled", True)),
+            "note": "" if club.get("enabled", True) else club.get("status", ""),
+            "by": [g for g in (played.get(club["name"]) or [])],
+        })
+
+    courses.sort(key=lambda c: (c["drive"], c["club"]))
+    return courses, golfers
+
+
 def _cached_page() -> str:
     if not OUT_FILE.exists():
         raise SystemExit("no docs/index.html to reuse — run without --offline first")
@@ -250,6 +285,82 @@ TEMPLATE = """<!doctype html>
   .icon:hover{color:var(--text); border-color:var(--border2)}
   :root[data-theme="dark"] .i-moon, .i-sun{display:none}
   :root[data-theme="dark"] .i-sun{display:block}
+
+  /* ---- view tabs ---- */
+  .tabs{display:flex; gap:4px; padding:12px 0 0}
+  .tabs button{
+    font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    border:1px solid transparent; background:transparent; color:var(--dim);
+    border-radius:10px; padding:7px 13px;
+  }
+  .tabs button[aria-pressed="true"]{
+    background:var(--surface); color:var(--text); border-color:var(--border);
+  }
+  .tabs .tally{font-weight:500; color:var(--faint); margin-left:6px;
+               font-variant-numeric:tabular-nums}
+
+  /* ---- courses checklist ---- */
+  .scoreboard{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+              margin:22px 0 4px}
+  .score{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:12px 14px;
+  }
+  .score .who{font-size:12px; font-weight:600; letter-spacing:.02em}
+  .score .num{font-size:24px; font-weight:700; letter-spacing:-.03em; margin-top:2px;
+              font-variant-numeric:tabular-nums}
+  .score .num small{font-size:13px; font-weight:500; color:var(--faint)}
+  .meter{height:5px; border-radius:99px; background:var(--surface2); margin-top:8px; overflow:hidden}
+  .meter i{display:block; height:100%; background:var(--accent); border-radius:99px}
+
+  .courses{display:flex; flex-direction:column; gap:8px; margin-top:14px}
+  .course{
+    display:flex; align-items:center; gap:12px; min-width:0;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:11px 13px;
+  }
+  .course.done{border-color:var(--accent-line); background:var(--accent-bg)}
+  .course .info{flex:1; min-width:0}
+  .course .nm{font-size:13.5px; font-weight:600; letter-spacing:-.01em;
+              overflow-wrap:anywhere}
+  .course .sub2{font-size:11px; color:var(--faint); margin-top:1px;
+                font-variant-numeric:tabular-nums}
+  .ticks{display:flex; gap:6px; flex:none}
+  .tick{
+    font:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+    border:1px solid var(--border2); background:transparent; color:var(--dim);
+    border-radius:999px; padding:5px 10px 5px 7px;
+    transition:background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .tick .box{
+    width:14px; height:14px; border-radius:4px; flex:none;
+    border:1.5px solid currentColor; display:grid; place-items:center;
+  }
+  .tick .box svg{width:9px; height:9px; stroke:currentColor; stroke-width:3;
+                 fill:none; stroke-linecap:round; stroke-linejoin:round; opacity:0}
+  .tick[aria-pressed="true"]{background:var(--accent); border-color:var(--accent);
+                             color:var(--accent-ink)}
+  .tick[aria-pressed="true"] .box{background:transparent}
+  .tick[aria-pressed="true"] .box svg{opacity:1}
+
+  .unsaved{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--sand-bg); border:1px solid var(--sand-line);
+    border-radius:12px; padding:11px 13px; margin-top:16px;
+    font-size:12px; color:var(--sand);
+  }
+  .unsaved b{color:var(--text); font-weight:600}
+  .unsaved button{
+    font:inherit; font-size:12px; font-weight:600; cursor:pointer; margin-left:auto;
+    background:var(--sand); color:var(--bg); border:0; border-radius:9px; padding:6px 12px;
+  }
+  .yaml{
+    width:100%; margin-top:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11.5px; line-height:1.5; color:var(--text);
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:9px; padding:10px; resize:vertical; min-height:96px;
+  }
 
   /* ---- filters ---- */
   .filters{
@@ -482,7 +593,9 @@ TEMPLATE = """<!doctype html>
 </div></header>
 <div class="turf"></div>
 
-<section class="filters"><div class="inner">
+<div class="inner"><div class="tabs" id="tabs"></div></div>
+
+<section class="filters" id="filterbar"><div class="inner">
   <div class="days" id="days"></div>
 
   <button class="ftoggle" id="ftoggle" aria-expanded="false">
@@ -516,9 +629,12 @@ TEMPLATE = """<!doctype html>
 </div></section>
 
 <main class="inner">
-  <div class="stats" id="stats"></div>
-  <div id="list"></div>
-  <div id="ring"></div>
+  <div id="timesview">
+    <div class="stats" id="stats"></div>
+    <div id="list"></div>
+    <div id="ring"></div>
+  </div>
+  <div id="coursesview" hidden></div>
   <footer>
     <span>Public tee sheets · tap a time to book</span>
     <span id="built"></span>
@@ -528,6 +644,8 @@ TEMPLATE = """<!doctype html>
 <script>
 const DATA = __DATA__;
 const CONTACTS = __CONTACTS__;
+const COURSES = __COURSES__;
+const GOLFERS = __GOLFERS__;
 const BUILT = "__BUILT__";
 
 /* ---------- helpers ---------- */
@@ -573,7 +691,8 @@ const PLAYERS = [1, 2, 3, 4];
 const SORTS = [['time','Earliest'], ['drive','Closest'], ['count','Most open']];
 const CHIP_LIMIT = 8;
 
-const DEFAULTS = { day:'all', players:4, tmin:T_LO, tmax:T_HI, drive:D_HI, sort:'time' };
+const DEFAULTS = { day:'all', players:4, tmin:T_LO, tmax:T_HI, drive:D_HI, sort:'time',
+                   view:'times' };
 const state = Object.assign({}, DEFAULTS, restore());
 const expanded = new Set();
 
@@ -584,6 +703,7 @@ function restore(){
     if (s.day === 'all' || ALL_DAYS.indexOf(s.day) > -1) out.day = s.day;
     if (PLAYERS.indexOf(s.players) > -1) out.players = s.players;
     if (SORTS.some(x => x[0] === s.sort)) out.sort = s.sort;
+    if (s.view === 'times' || s.view === 'courses') out.view = s.view;
     if (typeof s.tmin === 'number') out.tmin = Math.min(Math.max(s.tmin, T_LO), T_HI);
     if (typeof s.tmax === 'number') out.tmax = Math.min(Math.max(s.tmax, T_LO), T_HI);
     if (out.tmin > out.tmax) { delete out.tmin; delete out.tmax; }
@@ -662,8 +782,14 @@ $('list').onclick = e => {
   render();
 };
 
+$('coursesview').onclick = e => {
+  const b = e.target.closest('.tick');
+  if (b) togglePlayed(b.dataset.club, b.dataset.who);
+};
+
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (state.view !== 'times') return;
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   const seq = ['all'].concat(ALL_DAYS);
@@ -817,6 +943,119 @@ function renderList(){
   list.innerHTML = html;
 }
 
+/* ---------- courses played ----------
+   played.yaml is the shared record; ticks made here are this device only
+   until they are pasted back and committed, so the two are tracked apart
+   and the difference is surfaced rather than hidden. */
+const BASE = {};
+COURSES.forEach(c => { BASE[c.club] = (c.by || []).slice().sort(); });
+
+let local = {};
+try { local = JSON.parse(localStorage.getItem('tee.played') || '{}'); } catch (e) { local = {}; }
+
+const saveLocal = () => { try { localStorage.setItem('tee.played', JSON.stringify(local)); } catch (e) {} };
+const whoPlayed = club => (local[club] !== undefined ? local[club] : BASE[club] || []);
+const hasPlayed = (club, id) => whoPlayed(club).indexOf(id) > -1;
+const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+function togglePlayed(club, id){
+  const now = whoPlayed(club).slice();
+  const i = now.indexOf(id);
+  if (i > -1) now.splice(i, 1); else now.push(id);
+  now.sort();
+  if (same(now, BASE[club] || [])) delete local[club]; else local[club] = now;
+  saveLocal();
+  render();
+}
+
+const drifted = () => COURSES.map(c => c.club).filter(c => local[c] !== undefined);
+
+function playedYaml(){
+  const lines = ['played:'];
+  const entries = COURSES
+    .map(c => [c.club, whoPlayed(c.club)])
+    .filter(([, who]) => who.length);
+  if (!entries.length) return 'played: {}';
+  entries.forEach(([club, who]) => {
+    const key = /^[A-Za-z][A-Za-z0-9 ()/&.-]*$/.test(club) ? club : JSON.stringify(club);
+    lines.push('  ' + key + ': [' + who.join(', ') + ']');
+  });
+  return lines.join(String.fromCharCode(10));
+}
+
+function renderCourses(){
+  const el = $('coursesview');
+  const tick = '<svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+
+  const boards = GOLFERS.map(g => {
+    const n = COURSES.filter(c => hasPlayed(c.club, g.id)).length;
+    const pctDone = COURSES.length ? Math.round((n / COURSES.length) * 100) : 0;
+    return '<div class="score"><div class="who">' + esc(g.name) + '</div>' +
+      '<div class="num">' + n + ' <small>of ' + COURSES.length + '</small></div>' +
+      '<div class="meter"><i style="width:' + pctDone + '%"></i></div></div>';
+  }).join('');
+
+  const bothCount = COURSES.filter(c => GOLFERS.every(g => hasPlayed(c.club, g.id))).length;
+  const noneCount = COURSES.filter(c => !whoPlayed(c.club).length).length;
+  const summary = '<div class="score"><div class="who">Together</div>' +
+    '<div class="num">' + bothCount + ' <small>both · ' + noneCount + ' still to play</small></div>' +
+    '<div class="meter"><i style="width:' +
+    (COURSES.length ? Math.round((bothCount / COURSES.length) * 100) : 0) + '%"></i></div></div>';
+
+  const rows = COURSES.map(c => {
+    const who = whoPlayed(c.club);
+    const all = GOLFERS.length && GOLFERS.every(g => who.indexOf(g.id) > -1);
+    const bits = [c.drive + ' min'];
+    if (!c.scanned) bits.push(c.note === 'walking-only' ? 'walking only'
+                            : c.note === 'chronogolf' ? 'book by phone' : 'not scanned');
+    return '<div class="course' + (all ? ' done' : '') + '">' +
+      '<div class="info"><div class="nm">' + esc(c.club) + '</div>' +
+      '<div class="sub2">' + esc(bits.join(' · ')) + '</div></div>' +
+      '<div class="ticks">' + GOLFERS.map(g =>
+        '<button class="tick" type="button" data-club="' + esc(c.club) + '" data-who="' + esc(g.id) + '"' +
+        ' aria-pressed="' + (who.indexOf(g.id) > -1) + '">' +
+        '<span class="box">' + tick + '</span>' + esc(g.name) + '</button>').join('') +
+      '</div></div>';
+  }).join('');
+
+  const changed = drifted();
+  const banner = changed.length
+    ? '<div class="unsaved"><span><b>' + changed.length +
+      (changed.length === 1 ? ' course' : ' courses') + ' ticked on this device only.</b> ' +
+      'Paste into played.yaml and commit so it shows for both of you.</span>' +
+      '<button type="button" id="exportbtn">Copy for played.yaml</button>' +
+      '<textarea class="yaml" id="yamlout" readonly>' + esc(playedYaml()) + '</textarea></div>'
+    : '';
+
+  el.innerHTML = '<div class="scoreboard">' + boards + summary + '</div>' +
+                 '<div class="courses">' + rows + '</div>' + banner;
+
+  if (changed.length){
+    $('exportbtn').onclick = () => {
+      const box = $('yamlout');
+      box.select();
+      try { navigator.clipboard.writeText(box.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+      $('exportbtn').textContent = 'Copied';
+    };
+  }
+}
+
+function renderTabs(){
+  const el = $('tabs');
+  const left = COURSES.filter(c => !whoPlayed(c.club).length).length;
+  const defs = [['times', 'Tee times', DATA.length.toLocaleString()],
+                ['courses', 'Courses', left + ' to play']];
+  el.innerHTML = '';
+  defs.forEach(([k, label, tally]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(state.view === k));
+    b.innerHTML = esc(label) + '<span class="tally">' + esc(tally) + '</span>';
+    b.onclick = () => { state.view = k; render(); };
+    el.appendChild(b);
+  });
+}
+
 function renderRing(){
   const el = $('ring');
   // Only the drive filter applies — there are no times to filter on.
@@ -844,10 +1083,20 @@ function renderRing(){
 }
 
 function render(){
-  syncControls();
-  renderDays();
-  renderList();
-  renderRing();
+  const onCourses = state.view === 'courses';
+  $('filterbar').hidden = onCourses;
+  $('timesview').hidden = onCourses;
+  $('coursesview').hidden = !onCourses;
+
+  renderTabs();
+  if (onCourses){
+    renderCourses();
+  } else {
+    syncControls();
+    renderDays();
+    renderList();
+    renderRing();
+  }
   save();
 }
 
@@ -887,9 +1136,15 @@ def main() -> int:
     if contacts:
         print(f"{len(contacts)} call-to-book clubs", file=sys.stderr)
 
+    courses, golfers = collect_courses()
+    ticked = sum(1 for c in courses if c["by"])
+    print(f"{len(courses)} courses on the checklist, {ticked} played", file=sys.stderr)
+
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
             .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
+            .replace("__COURSES__", json.dumps(courses, separators=(",", ":")))
+            .replace("__GOLFERS__", json.dumps(golfers, separators=(",", ":")))
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
             .replace("__DRIVE__", str(args.max_drive)))
