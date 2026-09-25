@@ -31,9 +31,6 @@ courses:
     drive_min: 20
   - name: Helensvale Golf Club
     drive_min: 20
-  - name: Links Hope Island
-    drive_min: 25
-    note: resort
   - name: Sanctuary Cove — The Pines
     drive_min: 25
     note: members and resort guests

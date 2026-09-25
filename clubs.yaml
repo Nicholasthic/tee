@@ -82,12 +82,21 @@ clubs:
     enabled: true
 
   # ---------- candidates: run --discover to confirm ----------
-  # Not on MiClub — books through its own Tee It Up site.
+  # Not on MiClub. Was scanned via its own Tee It Up site, but that API now
+  # sits behind a Cloudflare bot challenge and returns a "Just a moment..."
+  # page. Same facility id works on GolfNow, so it reads from there instead.
   - name: The Glades
-    source: teeitup
-    alias: thegladesgolfclub
+    source: golfnow
     facility_id: 15365
     drive_min: 10
+    status: confirmed
+    enabled: true
+
+  # Resort course, public tee times on GolfNow.
+  - name: Links Hope Island
+    source: golfnow
+    facility_id: 15324
+    drive_min: 25
     status: confirmed
     enabled: true
 

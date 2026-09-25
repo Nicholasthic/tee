@@ -107,10 +107,14 @@ or `NO-PUB`, open the club's website and click "Book a tee time":
   `facility_id: NNNNN`.
 
 Tee It Up and GolfNow are both NBC Sports Next products and share facility ids,
-so the same number works for either. **Prefer `teeitup`**: it's a plain GET, the
-response is ~50x smaller, it states allowed group sizes explicitly instead of as
-an enum, and its links book direct with the club rather than through the
-aggregator. Use `golfnow` only for facilities with no Tee It Up front end.
+so the same number works for either.
+
+**Use `golfnow`.** `teeitup` is the nicer API on paper — a plain GET, ~50x
+smaller response, explicit group sizes, and links that book direct with the
+club — but as of September 2026 its endpoint sits behind a Cloudflare bot
+challenge and returns a "Just a moment..." page to anything that isn't a
+browser. The adapter is still there in case that lifts; until it does,
+`golfnow` reads the same facility ids and works.
 
 Clubs outside Queensland should set `timezone:` (e.g. `Australia/Sydney`), since
 NSW observes daylight saving and Queensland doesn't.
