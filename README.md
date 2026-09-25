@@ -234,6 +234,11 @@ Use `--offline` when you're changing the layout. It re-renders the template agai
 the records already embedded in `docs/index.html`, keeps the original scan timestamp,
 and doesn't touch the clubs.
 
+If a club errors during a scan it used to just vanish from the page, which is
+how The Glades stayed broken for weeks. The footer now names any club that
+failed and why, so a silent failure is visible on the page itself rather than
+only in the workflow log.
+
 The page groups by day, then by club. Each club gets a timeline of the whole day with
 every open slot marked — clusters and gaps are obvious at a glance — plus the actual
 times as links straight to that club's booking sheet. The red pin is the earliest slot.

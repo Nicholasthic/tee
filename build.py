@@ -176,6 +176,15 @@ def cached_built() -> str:
     return m.group(1) if m else datetime.now().astimezone().isoformat()
 
 
+def cached_problems() -> list[str]:
+    """Carry failures through an offline rebuild — they belong to the scan."""
+    m = re.search(r"const PROBLEMS = (\[.*?\]);", _cached_page(), re.S)
+    try:
+        return json.loads(m.group(1)) if m else []
+    except json.JSONDecodeError:
+        return []
+
+
 def to_records(openings) -> list[dict]:
     """One record per club+day+time, with fee options merged."""
     merged: dict[tuple, dict] = {}
@@ -643,6 +652,17 @@ TEMPLATE = """<!doctype html>
     font-size:11px; color:var(--faint);
     display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
   }
+
+  /* A club that errors just disappears from the list, which is how The Glades
+     stayed broken for weeks. Say so instead. */
+  .failed{
+    flex-basis:100%; order:-1; margin-bottom:12px;
+    border:1px solid var(--flag); border-radius:11px;
+    padding:10px 13px; color:var(--flag); font-size:12px;
+  }
+  .failed b{font-weight:650}
+  .failed ul{list-style:none; margin-top:5px; display:grid; gap:2px}
+  .failed li{font-size:11.5px; opacity:.85}
 </style>
 </head><body>
 
@@ -710,6 +730,7 @@ TEMPLATE = """<!doctype html>
   </div>
   <div id="coursesview" hidden></div>
   <footer>
+    <div class="failed" id="failed" hidden></div>
     <span>Public tee sheets · tap a time to book</span>
     <span id="built"></span>
   </footer>
@@ -719,6 +740,7 @@ TEMPLATE = """<!doctype html>
 const DATA = __DATA__;
 const CONTACTS = __CONTACTS__;
 const COURSES = __COURSES__;
+const PROBLEMS = __PROBLEMS__;
 const REPO = "__REPO__";
 const BUILT = "__BUILT__";
 
@@ -1369,6 +1391,21 @@ function render(){
   save();
 }
 
+/* Name the clubs that errored on the last scan. Each message is already
+   "Club: what went wrong", so lead with the count and list the detail. */
+function renderFailed(){
+  const el = $('failed');
+  if (!PROBLEMS.length){ el.hidden = true; return; }
+  const names = PROBLEMS.map(m => m.split(':')[0].trim());
+  el.hidden = false;
+  el.innerHTML =
+    '<b>' + PROBLEMS.length + (PROBLEMS.length === 1 ? ' club' : ' clubs') +
+    ' did not respond on the last scan</b> — ' + esc(names.join(', ')) +
+    '. Their tee times are missing from this page, not unavailable.' +
+    '<ul>' + PROBLEMS.map(m => '<li>' + esc(m) + '</li>').join('') + '</ul>';
+}
+renderFailed();
+
 $('built').textContent = ago(BUILT);
 render();
 // The shared list reads without a token, so both phones see the same ticks.
@@ -1391,6 +1428,7 @@ def main() -> int:
 
     if args.offline:
         records = cached_records(args.max_drive)
+        problems = cached_problems()
     else:
         openings, problems = collect(args.days, args.max_drive, args.all_fees)
         for msg in problems:
@@ -1416,6 +1454,7 @@ def main() -> int:
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
             .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
             .replace("__COURSES__", json.dumps(courses, separators=(",", ":")))
+            .replace("__PROBLEMS__", json.dumps(problems, separators=(",", ":")))
             .replace("__REPO__", repo_slug())
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
