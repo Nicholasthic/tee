@@ -314,6 +314,30 @@ ahead. It also asks the browser to keep the screen on, because a screen that
 dies every thirty seconds for four hours is the difference between using
 this and not.
 
+**The hole is drawn, not photographed.** Play shows a plan of the hole you
+are on — fairway, bunkers, water, the green as its real outline, the
+centreline, and you moving on it. It is an inline SVG built from vectors in
+`holes.yaml`: no tiles, no third party, nothing fetched. It works with the
+phone in flight mode, which a tile map on the 14th at Tamborine would not.
+
+Every hole is turned so the tee is at the bottom and the green at the top,
+the way a yardage book draws it. Once you are past the tee it crops to what
+is left of the hole, so standing 150m out you get the approach at twice the
+size instead of 300m of fairway you have already played.
+
+Features come from OSM the same way the holes do, and are tied to whichever
+hole's centreline they sit nearest. Some are mapped as multipolygon
+relations rather than simple ways — all of Burleigh's fairways are — so the
+outer rings get stitched back together before drawing. A hole with fewer
+than three shapes doesn't get a picture at all: Southport has its greens
+mapped and nothing else, and one green floating in space is worse than the
+number on its own. Meadowbrook is in the same boat.
+
+That artwork is what takes the page from about 690 KB to 918 KB. The
+polygons are simplified to 3 metres and stored as whole metres from the
+course origin, which is what keeps it to roughly 18 KB a course rather than
+130 KB.
+
 Where a course has no card saved yet, Play shows the par off the hole map
 rather than the generic placeholder — otherwise it would call a 500m hole a
 par 3 — and says so underneath.

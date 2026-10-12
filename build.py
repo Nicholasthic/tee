@@ -272,7 +272,8 @@ def collect_holes() -> dict:
         out[name] = {
             "at": course.get("at"),
             "loops": loops,
-            "holes": [{k: h[k] for k in ("hole", "par", "tee", "len", "green", "line")
+            "holes": [{k: h[k] for k in ("hole", "par", "tee", "len", "green",
+                                         "line", "art")
                        if h.get(k) is not None} for h in holes],
         }
 
@@ -378,6 +379,8 @@ TEMPLATE = """<!doctype html>
     --flag:#b6432f;
     --mow:rgba(20,101,63,.05);
     --dawn:rgba(214,158,74,.13); --dusk:rgba(58,84,132,.1);
+    --turf:#cfe0c4; --turf-line:#aec49f; --putt:#95c684;
+    --sandy:#e3c07a; --wet:#8fb4d4; --teebox:#b9b29a;
     --shadow:0 1px 2px rgba(30,34,20,.05), 0 12px 28px -20px rgba(30,34,20,.45);
     --radius:14px;
     color-scheme:light;
@@ -392,6 +395,8 @@ TEMPLATE = """<!doctype html>
       --flag:#e2755d;
       --mow:rgba(75,212,134,.038);
       --dawn:rgba(214,176,106,.075); --dusk:rgba(96,124,180,.085);
+      --turf:#17331f; --turf-line:#234a2d; --putt:#327245;
+      --sandy:#5d4a24; --wet:#1f3b53; --teebox:#303e33;
       --shadow:0 1px 2px rgba(0,0,0,.45), 0 14px 34px -22px rgba(0,0,0,.95);
       color-scheme:dark;
     }
@@ -405,6 +410,8 @@ TEMPLATE = """<!doctype html>
     --flag:#e2755d;
     --mow:rgba(75,212,134,.038);
     --dawn:rgba(214,176,106,.075); --dusk:rgba(96,124,180,.085);
+    --turf:#17331f; --turf-line:#234a2d; --putt:#327245;
+    --sandy:#5d4a24; --wet:#1f3b53; --teebox:#303e33;
     --shadow:0 1px 2px rgba(0,0,0,.45), 0 14px 34px -22px rgba(0,0,0,.95);
     color-scheme:dark;
   }
@@ -567,6 +574,10 @@ TEMPLATE = """<!doctype html>
   .play .note{font-size:11.5px; color:var(--faint); margin-top:8px; line-height:1.45}
   .play .note button{font:inherit; font-size:11.5px; color:var(--accent); cursor:pointer;
                      background:none; border:0; padding:0; text-decoration:underline}
+  .play .holeart{width:100%; height:min(34vh,290px); margin:2px 0 8px}
+  .play .arttoggle{font:inherit; font-size:11.5px; cursor:pointer; color:var(--dim);
+    background:transparent; border:1px solid var(--border2); border-radius:8px;
+    padding:4px 10px; margin-left:9px}
   .play .pscore{display:flex; align-items:center; gap:12px}
   .play .pscore button{flex:none; width:68px; height:68px; border-radius:50%; cursor:pointer;
     font:inherit; font-size:30px; font-weight:400; color:var(--text);
@@ -2077,6 +2088,7 @@ function startGps(){
    can hit without taking a glove off. */
 let playing = false;
 let playSlot = 0;                                  // which of the 18 is on screen
+let showArt = true;
 let wake = null;
 
 async function keepAwake(on){
@@ -2090,6 +2102,86 @@ async function keepAwake(on){
 document.addEventListener('visibilitychange', () => {
   if (wake === null && playing && document.visibilityState === 'visible') keepAwake(true);
 });
+
+/* ---------- drawing the hole ----------
+   Not a map: no tiles, no third party, nothing fetched. The shapes come out
+   of holes.yaml as metres from the course origin, and get turned and scaled
+   to fit a box. Turned, because a hole drawn at whatever angle north happens
+   to be is a puzzle - every yardage book in the world puts the tee at the
+   bottom and the green at the top, so this does too. */
+const ART_FILL = { f:'var(--turf)', g:'var(--putt)', b:'var(--sandy)',
+                   w:'var(--wet)', t:'var(--teebox)' };
+
+function toMetres(origin, p){
+  const klon = Math.cos(origin[0] * Math.PI / 180) * 111320;
+  return [(p[1] - origin[1]) * klon, (p[0] - origin[0]) * 111320];
+}
+
+function drawHole(course, mh, me){
+  const origin = (HOLES[course] || {}).at;
+  if (!origin || !mh) return '';
+  const art = mh.art || [];
+  const line = (mh.line || [mh.tee, mh.green].filter(Boolean))
+                 .map(p => toMetres(origin, p));
+  // One lone green and a dashed line is not a picture of a hole. Below a
+  // few shapes the number on its own is more honest.
+  if (line.length < 2 || art.length < 3) return '';
+
+  // turn the whole drawing so the hole plays straight up the page
+  const T = line[0], G = line[line.length - 1];
+  const th = Math.atan2(G[0] - T[0], G[1] - T[1]);
+  const ct = Math.cos(th), st = Math.sin(th);
+  const turn = q => {
+    const x = q[0] - T[0], y = q[1] - T[1];
+    return [x * ct - y * st, x * st + y * ct];
+  };
+
+  const shapes = art.map(a => [a[0], a[1].map(turn)]);
+  const path = line.map(turn);
+  const dot = me ? turn(toMetres(origin, me)) : null;
+
+  // How much of the hole to show. Standing 180m out, the tee behind you is
+  // 260m of picture you are not going to play - drop it and what is left
+  // gets drawn twice the size. From the tee you see the lot.
+  let lo = 0, hi = -1e9;
+  shapes.forEach(sh => sh[1].forEach(q => { hi = Math.max(hi, q[1]); }));
+  path.forEach(q => { hi = Math.max(hi, q[1]); });
+  if (dot){
+    hi = Math.max(hi, dot[1]);
+    if (dot[1] > 70) lo = dot[1] - 45;             // keep a little behind you
+  }
+
+  let x0 = 1e9, x1 = -1e9;
+  const wide = q => { if (q[1] >= lo - 25 && q[1] <= hi + 25){
+                        x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); } };
+  shapes.forEach(sh => sh[1].forEach(wide));
+  path.forEach(wide);
+  if (dot) wide(dot);
+  if (x0 > x1){ x0 = -40; x1 = 40; }
+
+  const pad = 12;
+  x0 -= pad; x1 += pad;
+  let y0 = lo - pad, y1 = hi + pad;
+  const w = x1 - x0, h = y1 - y0;
+  // SVG counts downwards, the hole plays upwards
+  const pt = q => (q[0] - x0).toFixed(1) + ',' + (y1 - q[1]).toFixed(1);
+  const ring = ps => ps.map(pt).join(' ');
+
+  // fairway first, then hazards, then the green on top of everything
+  const order = { f:0, t:1, w:2, b:3, g:4 };
+  shapes.sort((a, b) => order[a[0]] - order[b[0]]);
+
+  return '<svg class="holeart" viewBox="0 0 ' + w.toFixed(1) + ' ' + h.toFixed(1) +
+    '" preserveAspectRatio="xMidYMid meet" aria-label="Plan of the hole">' +
+    shapes.map(sh => '<polygon points="' + ring(sh[1]) + '" fill="' +
+      ART_FILL[sh[0]] + '"' + (sh[0] === 'f' ? ' stroke="var(--turf-line)" stroke-width="1.5"' : '') +
+      '/>').join('') +
+    '<polyline points="' + ring(path) + '" fill="none" stroke="var(--faint)" ' +
+      'stroke-width="1.2" stroke-dasharray="5 6" opacity=".7"/>' +
+    (dot ? '<circle cx="' + (dot[0] - x0).toFixed(1) + '" cy="' + (y1 - dot[1]).toFixed(1) +
+      '" r="7" fill="var(--accent)" stroke="var(--surface)" stroke-width="3"/>' : '') +
+    '</svg>';
+}
 
 function scoreName(s, pv){
   if (s === 1) return 'ace';
@@ -2175,11 +2267,19 @@ function paintPlay(){
   const parSoFar = par.reduce((a, pp, k) => a + (sheet.strokes[k] != null ? (pp || 0) : 0), 0);
   const rel = gross - parSoFar;
 
+  const me = gps.pos && !gps.err
+    ? [gps.pos.coords.latitude, gps.pos.coords.longitude] : null;
+  const art = showArt ? drawHole(sheet.course, mh, me) : '';
+  const drawable = !!drawHole(sheet.course, mh, null);
+
   el.innerHTML =
     '<div class="phead"><div><span class="hn">Hole ' + (i + 1) + '</span>' +
       '<span class="hm">' + (pv ? 'par ' + pv : '') +
-      (mh && mh.len ? ' &middot; ' + mh.len + 'm' : '') + '</span></div>' +
+      (mh && mh.len ? ' &middot; ' + mh.len + 'm' : '') + '</span>' +
+      (drawable ? '<button class="arttoggle" type="button" id="p-art">' +
+        (showArt ? 'hide' : 'plan') + '</button>' : '') + '</div>' +
       '<button class="btn ghost" type="button" id="p-card">Scorecard</button></div>' +
+    art +
     '<div class="pyds">' + yds + '</div>' +
     '<div class="pscore">' +
       '<button type="button" id="p-minus" aria-label="One stroke less">&minus;</button>' +
@@ -2198,6 +2298,7 @@ function paintPlay(){
 
   const bind = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
   bind('p-card', leavePlay);
+  bind('p-art', () => { showArt = !showArt; paintPlay(); });
   bind('p-gps', () => { startGps(); paintPlay(); });
   bind('p-auto', () => { gps.manual = false; paintPlay(); });
   bind('p-minus', () => {

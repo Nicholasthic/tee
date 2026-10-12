@@ -103,6 +103,21 @@ out center;
 """
 
 
+# What a hole looks like, for drawing it. Cartpaths and rough are left out:
+# they are a lot of points and they tell you nothing standing over a ball.
+ART_Q = """
+[out:json][timeout:120];
+{sel}; map_to_area->.a;
+(
+  way(area.a)["golf"~"^(green|fairway|bunker|water_hazard|tee)$"];
+  relation(area.a)["golf"~"^(green|fairway|bunker|water_hazard|tee)$"];
+);
+out geom;
+"""
+ART_CODE = {"green": "g", "fairway": "f", "bunker": "b",
+            "water_hazard": "w", "tee": "t"}
+
+
 def overpass(query: str, tries: int = 5) -> dict:
     """Overpass 504s and 500s a lot under load. Back off and try the mirrors.
 
@@ -291,6 +306,83 @@ def own(els: list[dict], mine: str, centres: dict[str, list[float]]) -> list[dic
     return keep
 
 
+def frame(at: tuple[float, float]):
+    """Metres east and north of the course origin, as whole numbers.
+
+    Lat/lon at six decimal places costs about twice the characters for a
+    precision nobody can see on a drawing of a golf hole. A metre grid is
+    also what the drawing code wants anyway.
+    """
+    klon = 111320 * math.cos(math.radians(at[0]))
+    return lambda p: [round((p[1] - at[1]) * klon), round((p[0] - at[0]) * 111320)]
+
+
+def stitch(el: dict) -> list[list]:
+    """The outlines in one feature, as closed rings.
+
+    A way is already a ring. A multipolygon relation is its outer edge cut
+    into several ways that have to be joined back up end to end - Burleigh's
+    fairways are all mapped that way, and skipping relations lost every one
+    of them. Inner rings (islands in a lake) are dropped; drawing a lake
+    without its island beats drawing nothing.
+    """
+    if el.get("type") != "relation":
+        geom = el.get("geometry") or []
+        return [[(g["lat"], g["lon"]) for g in geom]] if len(geom) >= 3 else []
+
+    segs = [[(g["lat"], g["lon"]) for g in (m.get("geometry") or [])]
+            for m in (el.get("members") or [])
+            if m.get("role") in ("outer", "") and (m.get("geometry") or [])]
+
+    rings = []
+    while segs:
+        cur = segs.pop(0)
+        joined = True
+        while joined and cur[0] != cur[-1]:
+            joined = False
+            for i, seg in enumerate(segs):
+                if seg[0] == cur[-1]:    cur = cur + seg[1:]
+                elif seg[-1] == cur[-1]: cur = cur + seg[-2::-1]
+                elif seg[-1] == cur[0]:  cur = seg[:-1] + cur
+                elif seg[0] == cur[0]:   cur = seg[:0:-1] + cur
+                else:                    continue
+                segs.pop(i)
+                joined = True
+                break
+        if len(cur) >= 4:
+            rings.append(cur)
+    return rings
+
+
+def attach_art(rows: list[dict], els: list[dict], at: tuple[float, float]) -> None:
+    """Hang each mapped feature off the hole it sits on.
+
+    Nearest centreline wins, which puts a bunker between two fairways on
+    whichever hole it actually guards. Anything far from every hole - the
+    practice range, a dam in the trees - is dropped rather than drawn
+    somewhere misleading.
+    """
+    to_m = frame(at)
+    lines = [[(a, b) for a, b in (h.get("line") or [])] for h in rows]
+    for el in els:
+        kind = ART_CODE.get((el.get("tags") or {}).get("golf"))
+        if not kind:
+            continue
+        for pts in stitch(el):
+            c = (sum(a for a, _ in pts) / len(pts), sum(b for _, b in pts) / len(pts))
+
+            best, bd = None, 1e9
+            for i, line in enumerate(lines):
+                for j in range(len(line) - 1):
+                    d = seg_dist(c, line[j], line[j + 1])
+                    if d < bd:
+                        best, bd = i, d
+            if best is None or bd > 150:
+                continue
+            rows[best].setdefault("art", []).append(
+                [kind, [to_m(q) for q in simplify(pts, 3.0)]])
+
+
 def mid(el: dict):
     geom = el.get("geometry") or []
     if not geom:
@@ -388,6 +480,10 @@ HEADER = (
     "# mapper filled them in - blanks mean nobody has, not par 0. Almost\n"
     "# nobody tags handicap, so stroke index still comes off the paper card.\n"
     "#\n"
+    "# art is what the hole looks like, for drawing it: fairway f, green g,\n"
+    "# bunker b, water w, tee t, each a ring of points given as whole metres\n"
+    "# east and north of the course's own 'at' point.\n"
+    "#\n"
     "# osm is the course polygon the holes were read from, kept so a re-run\n"
     "# skips the lookup. Re-run holes.py to refresh; don't hand-edit.\n\n"
 )
@@ -459,10 +555,29 @@ def main() -> int:
         # mapped would be refetched on every run forever.
         if done and len(rows_before) not in (9, 18, 27, 36) and not prev.get("box"):
             done = False
+        # holes came first, the shapes to draw them with came later
+        art_only = done and rows_before and not prev.get("drawn")
         if args.refresh is not None and (not args.refresh or name in args.refresh):
-            done = False                           # asked for by name
-        if done:
+            done, art_only = False, False          # asked for by name
+        if done and not art_only:
             print(f"  {name:<32} cached", file=sys.stderr)
+            continue
+
+        if art_only:
+            sel = f"{'rel' if m['type'] == 'rel' else 'way'}(id:{m['id']})"
+            try:
+                els = overpass(ART_Q.format(sel=sel)).get("elements", [])
+            except RuntimeError as e:
+                print(f"  {name:<32} no artwork: {e}", file=sys.stderr)
+                continue
+            for h in rows_before:
+                h.pop("art", None)
+            attach_art(rows_before, els, m["at"])
+            have[name]["drawn"] = True
+            save(have, known)
+            n = sum(len(h.get("art") or []) for h in rows_before)
+            print(f"  {name:<32} {n:>4} shapes to draw", file=sys.stderr)
+            time.sleep(2)
             continue
         sel = f"{'rel' if m['type'] == 'rel' else 'way'}(id:{m['id']})"
         try:
@@ -497,14 +612,27 @@ def main() -> int:
         except RuntimeError as e:
             print(f"  {name:<32} overpass failed: {e}", file=sys.stderr)
             continue
+        if rows and len(rows) in (9, 18, 27, 36):
+            try:
+                time.sleep(2)
+                attach_art(rows, overpass(ART_Q.format(sel=sel)).get("elements", []), m["at"])
+                drawn = True
+            except RuntimeError:
+                drawn = False                      # picked up on the next run
+        else:
+            drawn = False
+
         have[name] = {"osm": f"{m['type']}/{m['id']}", "at": m["at"], "holes": rows}
+        if drawn:
+            have[name]["drawn"] = True
         if boxed:
             have[name]["box"] = True               # fallback already tried
         save(have, known)                          # keep what we got
         print(f"  {name:<32} {len(rows):>2} holes "
               f"| par {sum('par' in r for r in rows)}"
               f" | si {sum('si' in r for r in rows)}"
-              f" | green {sum('green' in r for r in rows)}", file=sys.stderr)
+              f" | green {sum('green' in r for r in rows)}"
+              f" | {sum(len(r.get('art') or []) for r in rows)} shapes", file=sys.stderr)
         time.sleep(2)                              # be kind to a shared service
 
     save(have, known)
