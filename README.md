@@ -305,6 +305,19 @@ What it can't give you:
   Royal Pines come back as one polygon holding two sets of holes numbered
   1–18, and there is no way to tell which is which. Those are skipped.
 
+**On the course, press Play.** The scorecard grid is for writing a round up
+afterwards; Play gives you one hole at a time — distance to the middle of
+the green in letters you can read in the sun, par and length, and a pair of
+thumb-sized buttons for the score. It follows you round: the hole changes as
+you walk to the next tee, and the arrows pin it by hand if you want to look
+ahead. It also asks the browser to keep the screen on, because a screen that
+dies every thirty seconds for four hours is the difference between using
+this and not.
+
+Where a course has no card saved yet, Play shows the par off the hole map
+rather than the generic placeholder — otherwise it would call a 500m hole a
+par 3 — and says so underneath.
+
 The GPS watch is opt-in per round and stops the moment you leave the
 scorecard — `watchPosition` is the most expensive thing a phone can do in
 your pocket for four hours.

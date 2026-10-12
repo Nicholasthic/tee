@@ -201,6 +201,36 @@
   .gps .step button:disabled{opacity:.4; cursor:default}
   .gps .step .auto{margin-left:auto}
 
+  .play .phead{display:flex; align-items:baseline; gap:9px; margin-bottom:12px}
+  .play .hn{font-size:19px; font-weight:700; letter-spacing:-.02em}
+  .play .hm{font-size:12px; color:var(--dim); margin-left:7px}
+  .play .phead .btn{margin-left:auto}
+  .play .pyds{text-align:center; padding:14px 0 16px}
+  .play .big{font-size:76px; line-height:.9; font-weight:700; letter-spacing:-.045em;
+             color:var(--accent); font-variant-numeric:tabular-nums}
+  .play .big small{font-size:26px; font-weight:600; letter-spacing:-.02em}
+  .play .cap{font-size:12.5px; color:var(--dim); margin-top:7px}
+  .play .note{font-size:11.5px; color:var(--faint); margin-top:8px; line-height:1.45}
+  .play .note button{font:inherit; font-size:11.5px; color:var(--accent); cursor:pointer;
+                     background:none; border:0; padding:0; text-decoration:underline}
+  .play .pscore{display:flex; align-items:center; gap:12px}
+  .play .pscore button{flex:none; width:68px; height:68px; border-radius:50%; cursor:pointer;
+    font:inherit; font-size:30px; font-weight:400; color:var(--text);
+    background:var(--bg); border:1px solid var(--border2)}
+  .play .pscore button:active{background:var(--accent-bg); border-color:var(--accent-line)}
+  .play .pscore .val{flex:1; text-align:center; min-width:0}
+  .play .pscore .val b{display:block; font-size:44px; font-weight:700; line-height:1;
+                       letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+  .play .pscore .val span{display:block; font-size:11px; color:var(--faint); margin-top:5px;
+                          letter-spacing:.08em; text-transform:uppercase}
+  .play .pnav{display:flex; align-items:center; gap:9px; margin-top:16px}
+  .play .pnav button{font:inherit; font-size:12.5px; cursor:pointer; color:var(--dim);
+    background:transparent; border:1px solid var(--border2); border-radius:9px; padding:7px 12px}
+  .play .pnav button:disabled{opacity:.35; cursor:default}
+  .play .thru{flex:1; text-align:center; font-size:12px; color:var(--dim);
+              font-variant-numeric:tabular-nums}
+  .play .thru b{color:var(--text); font-weight:650; font-size:15px}
+
 
   .tees{display:flex; flex-direction:column; gap:6px; margin-top:6px}
   .teerow{display:flex; gap:6px; align-items:center}
@@ -1665,14 +1695,168 @@ function startGps(){
       const holes = holeMap(sheet && sheet.course);
       if (holes) gps.hole = nearestHole(holes, [p.coords.latitude, p.coords.longitude]);
     }
-    paintGps();
+    const play = $('s-play');
+  if (play) play.onclick = enterPlay;
+
+  paintPlay();
+  paintGps();
   }, e => {
     gps.err = e.code === 1
       ? 'Location is blocked for this page. Allow it in your browser settings.'
       : 'Could not get a fix — ' + (e.message || 'no signal') + '.';
-    paintGps();
-  }, { enableHighAccuracy: true, maximumAge: 4000, timeout: 25000 });
+    const play = $('s-play');
+  if (play) play.onclick = enterPlay;
+
+  paintPlay();
   paintGps();
+  }, { enableHighAccuracy: true, maximumAge: 4000, timeout: 25000 });
+  const play = $('s-play');
+  if (play) play.onclick = enterPlay;
+
+  paintPlay();
+  paintGps();
+}
+
+/* ---------- playing a hole ----------
+   The scorecard grid is for writing a round up afterwards. On the course you
+   want one hole, a number big enough to read in sunlight, and a button you
+   can hit without taking a glove off. */
+let playing = false;
+let playSlot = 0;                                  // which of the 18 is on screen
+let wake = null;
+
+async function keepAwake(on){
+  // The screen going dark every 30 seconds for four hours is the difference
+  // between using this and not. Not every browser has it; never mind if so.
+  try {
+    if (on && !wake && navigator.wakeLock) wake = await navigator.wakeLock.request('screen');
+    else if (!on && wake){ await wake.release(); wake = null; }
+  } catch (e) { wake = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (wake === null && playing && document.visibilityState === 'visible') keepAwake(true);
+});
+
+function scoreName(s, pv){
+  if (s === 1) return 'ace';
+  if (!pv) return s === 1 ? 'stroke' : 'strokes';
+  const d = s - pv;
+  return d <= -3 ? 'albatross' : d === -2 ? 'eagle' : d === -1 ? 'birdie' :
+         d === 0 ? 'par' : d === 1 ? 'bogey' : d === 2 ? 'double bogey' : (d + ' over');
+}
+
+function enterPlay(){
+  playing = true;
+  gps.manual = false;
+  const done = sheet.strokes.findIndex(x => x == null);
+  playSlot = done < 0 ? 17 : done;                 // pick up where you left off
+  if (gps.watch == null && holeMap(sheet.course)) startGps();
+  keepAwake(true);
+  render();
+  window.scrollTo(0, 0);
+}
+
+function leavePlay(){
+  playing = false;
+  keepAwake(false);
+  render();
+}
+
+function paintPlay(){
+  const el = $('play');
+  if (!el || !sheet) return;
+  const par = (cardFor(sheet.course).par) || [];
+  const holes = holeMap(sheet.course);
+
+  // follow the GPS unless somebody stepped through by hand
+  if (holes && !gps.manual && gps.hole != null){
+    const ref = holes[gps.hole].hole;
+    if (ref >= 1 && ref <= 18) playSlot = ref - 1;
+  }
+
+  const i = playSlot, sc = sheet.strokes[i];
+  // the mapped hole for this slot - the one the GPS picked when it agrees,
+  // which is what tells a 36-hole club's two 7th holes apart
+  const mh = !holes ? null
+    : (gps.hole != null && holes[gps.hole].hole === i + 1) ? holes[gps.hole]
+    : (holes.find(h => h.hole === i + 1) || null);
+
+  // The placeholder card would have us call a 500m hole a par 3. Where there
+  // is no real card yet, the map's par is the better guess of the two - and
+  // the note says where it came from rather than letting you assume.
+  const stock = cardFor(sheet.course).stock;
+  const mapPar = stock && mh && mh.par ? mh.par : null;
+  const pv = mapPar || par[i];
+
+  let yds;
+  if (!holes){
+    yds = '<div class="note">No hole map for ' + esc(sheet.course) +
+      ', so no yardages here. Scoring still works.</div>';
+  } else if (gps.watch == null){
+    yds = '<div class="note">GPS is off. ' +
+      '<button type="button" id="p-gps">Turn it on</button></div>';
+  } else if (gps.err){
+    yds = '<div class="note">' + esc(gps.err) + '</div>';
+  } else if (!gps.pos){
+    yds = '<div class="note">Waiting for a fix&hellip;</div>';
+  } else {
+    const at = [gps.pos.coords.latitude, gps.pos.coords.longitude];
+    const d = mh && mh.green ? Math.round(distM(at, mh.green)) : null;
+    const tee = mh && mh.tee ? Math.round(distM(at, mh.tee)) : null;
+    yds = (d == null
+        ? '<div class="note">No green mapped on this hole.</div>'
+        : '<div class="big">' + d + '<small>m</small></div>' +
+          '<div class="cap">to the middle of the green</div>') +
+      '<div class="note">' +
+      (tee != null && tee > 30 ? tee + 'm from the tee &middot; ' : '') +
+      '&plusmn;' + Math.round(gps.pos.coords.accuracy || 0) + 'm' +
+      (mapPar ? ' &middot; par off the map, no card saved yet' : '') +
+      (gps.manual ? ' &middot; picked by hand &middot; ' +
+        '<button type="button" id="p-auto">follow the GPS</button>' : '') +
+      '</div>';
+  }
+
+  const entered = sheet.strokes.filter(x => x != null).length;
+  const gross = sheet.strokes.reduce((a, b) => a + (b || 0), 0);
+  const parSoFar = par.reduce((a, pp, k) => a + (sheet.strokes[k] != null ? (pp || 0) : 0), 0);
+  const rel = gross - parSoFar;
+
+  el.innerHTML =
+    '<div class="phead"><div><span class="hn">Hole ' + (i + 1) + '</span>' +
+      '<span class="hm">' + (pv ? 'par ' + pv : '') +
+      (mh && mh.len ? ' &middot; ' + mh.len + 'm' : '') + '</span></div>' +
+      '<button class="btn ghost" type="button" id="p-card">Scorecard</button></div>' +
+    '<div class="pyds">' + yds + '</div>' +
+    '<div class="pscore">' +
+      '<button type="button" id="p-minus" aria-label="One stroke less">&minus;</button>' +
+      '<div class="val"><b>' + (sc == null ? '&mdash;' : sc) + '</b><span>' +
+        (sc == null ? 'no score yet' : scoreName(sc, pv)) + '</span></div>' +
+      '<button type="button" id="p-plus" aria-label="One stroke more">+</button>' +
+    '</div>' +
+    '<div class="pnav">' +
+      '<button type="button" id="p-prev"' + (i ? '' : ' disabled') + '>&lsaquo; ' +
+        (i ? 'Hole ' + i : 'back') + '</button>' +
+      '<span class="thru">' + entered + ' of 18 &middot; <b>' + (gross || '&mdash;') + '</b>' +
+        (entered ? ' (' + (rel > 0 ? '+' : '') + rel + ')' : '') + '</span>' +
+      '<button type="button" id="p-next"' + (i < 17 ? '' : ' disabled') + '>' +
+        (i < 17 ? 'Hole ' + (i + 2) : 'done') + ' &rsaquo;</button>' +
+    '</div>';
+
+  const bind = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
+  bind('p-card', leavePlay);
+  bind('p-gps', () => { startGps(); paintPlay(); });
+  bind('p-auto', () => { gps.manual = false; paintPlay(); });
+  bind('p-minus', () => {
+    sheet.strokes[i] = sheet.strokes[i] == null ? (pv || 4) : Math.max(1, sheet.strokes[i] - 1);
+    paintPlay();
+  });
+  bind('p-plus', () => {
+    sheet.strokes[i] = sheet.strokes[i] == null ? (pv || 4) : Math.min(20, sheet.strokes[i] + 1);
+    paintPlay();
+  });
+  // stepping by hand pins the hole, so a wandering fix can't move it under you
+  bind('p-prev', () => { gps.manual = true; playSlot = Math.max(0, i - 1); paintPlay(); });
+  bind('p-next', () => { gps.manual = true; playSlot = Math.min(17, i + 1); paintPlay(); });
 }
 
 function gpsBlock(){
@@ -1682,6 +1866,7 @@ function gpsBlock(){
 }
 
 function paintGps(){
+  if (playing) return paintPlay();
   const el = $('gps');
   if (!el) return;
   const holes = holeMap(sheet && sheet.course);
@@ -1737,7 +1922,11 @@ function paintGps(){
 
   $('g-toggle').onclick = () => {
     if (gps.watch != null) stopGps(); else startGps();   // live, not the captured state
-    paintGps();
+    const play = $('s-play');
+  if (play) play.onclick = enterPlay;
+
+  paintPlay();
+  paintGps();
   };
   const step = n => { gps.manual = true; gps.hole = (gps.hole || 0) + n; paintGps(); };
   if ($('g-prev')) $('g-prev').onclick = () => step(-1);
@@ -1752,6 +1941,8 @@ function renderSheet(){
   const tees = teeOptions(sheet.course);
   if (sheet.tee && tees.indexOf(sheet.tee) < 0) sheet.tee = '';
   if (!sheet.tee && tees.length) sheet.tee = tees[0];
+
+  if (playing) return '<div class="sheet play"><div id="play"></div></div>';
 
   const nine = (from, label) => {
     const idx = [];
@@ -1804,6 +1995,7 @@ function renderSheet(){
     '<div class="foot">' +
       '<span class="run">' + entered + ' of 18 &middot; <b>' + (gross || '—') + '</b>' +
       (entered === 18 ? ' (' + (rel > 0 ? '+' : '') + rel + ')' : '') + '</span>' +
+      '<button class="btn ghost" type="button" id="s-play">Play</button>' +
       '<button class="btn ghost" type="button" id="s-cancel">Cancel</button>' +
       '<button class="btn" type="button" id="s-save"' + (entered === 18 ? '' : ' disabled') +
       '>Save round</button>' +
@@ -1851,6 +2043,15 @@ function renderRounds(){
         (rel > 0 ? '+' : '') + rel + '</div></div></div>';
     }).join('');
 
+  // On the course the hole is the only thing that matters. Handicap boards and
+  // a sync bar are things to read at home, and scrolling past them in the sun
+  // with a glove on is not a feature.
+  if (playing){
+    el.innerHTML = renderSheet();
+    wireRounds();
+    return;
+  }
+
   const rated = COURSE_NAMES.filter(c => Object.keys((cardFor(c).tees) || {}).length).length;
   const drift = localRounds.length;
   el.innerHTML = syncBar() +
@@ -1897,6 +2098,10 @@ function wireRounds(){
     render();
   });
 
+  const play = $('s-play');
+  if (play) play.onclick = enterPlay;
+
+  paintPlay();
   paintGps();
 
   document.querySelectorAll('#roundsview .hole input').forEach(inp => {
@@ -1946,7 +2151,7 @@ function wireRounds(){
   });
 
   const cancel = $('s-cancel');
-  if (cancel) cancel.onclick = () => { stopGps(); sheet = null; render(); };
+  if (cancel) cancel.onclick = () => { stopGps(); keepAwake(false); playing = false; sheet = null; render(); };
 
   const save = $('s-save');
   if (save) save.onclick = () => {
@@ -1954,6 +2159,8 @@ function wireRounds(){
                        tee: sheet.tee || null, strokes: sheet.strokes.slice() });
     saveRounds();
     stopGps();
+    keepAwake(false);
+    playing = false;
     sheet = null;
     render();
     if (getToken() && REPO) pushRounds();
@@ -2033,7 +2240,7 @@ function render(){
   renderTabs();
   // Leaving the scorecard behind means nothing is reading the GPS, so drop
   // the watch rather than tracking the phone around in the background.
-  if (!onRounds) stopGps();
+  if (!onRounds){ stopGps(); keepAwake(false); playing = false; }
   if (onRounds){
     renderRounds();
   } else if (onCourses){
