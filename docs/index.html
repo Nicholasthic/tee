@@ -180,6 +180,25 @@
            border-radius:10px; padding:9px 12px; font-size:12px; margin-top:11px}
   .warnrow b{color:var(--text); font-weight:650}
 
+
+  .tees{display:flex; flex-direction:column; gap:6px; margin-top:6px}
+  .teerow{display:flex; gap:6px; align-items:center}
+  .teerow input{font:inherit; font-size:13px; padding:6px 8px; color:var(--text);
+    background:var(--bg); border:1px solid var(--border2); border-radius:8px; min-width:0}
+  .teerow .nm{flex:2} .teerow .num{flex:1; text-align:center; font-variant-numeric:tabular-nums}
+  .teerow button{font:inherit; font-size:12px; cursor:pointer; background:none;
+    border:1px solid var(--border2); color:var(--flag); border-radius:8px; padding:5px 9px}
+  .srow{display:grid; grid-template-columns:repeat(10,1fr); gap:3px; margin-top:4px}
+  .srow .h{display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0}
+  .srow .h span{font-size:9.5px; color:var(--faint); font-variant-numeric:tabular-nums}
+  .srow .h input{width:100%; min-width:0; text-align:center; font:inherit; font-size:13px;
+    padding:5px 0; color:var(--text); background:var(--bg);
+    border:1px solid var(--border2); border-radius:6px; font-variant-numeric:tabular-nums;
+    -moz-appearance:textfield}
+  .srow .h input::-webkit-outer-spin-button,
+  .srow .h input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0}
+  .srow .h.bad input{border-color:var(--flag)}
+
   /* ---- view tabs ---- */
   .tabs{display:flex; gap:4px; padding:12px 0 0}
   .tabs button{
@@ -1339,6 +1358,179 @@ async function pushRounds(){
   render();
 }
 
+/* ---------- course cards ----------
+   Course Rating and Slope come off the card in the pro shop. Published
+   aggregators disagree with each other, so nothing here is guessed — an
+   unrated course simply doesn't count toward a handicap until you type it. */
+let localCards = {};
+try { localCards = JSON.parse(localStorage.getItem('tee.cards') || '{}'); } catch (e) { localCards = {}; }
+const saveCards = () => { try { localStorage.setItem('tee.cards', JSON.stringify(localCards)); } catch (e) {} };
+Object.keys(localCards).forEach(k => { CARDS[k] = localCards[k]; });
+
+let editing = null;   // { course, par[18], si[18], tees:[{name,cr,slope}] }
+
+function openEditor(course){
+  const c = cardFor(course);
+  editing = {
+    course,
+    par: (c.par || []).slice(0, 18),
+    si: (c.si || []).slice(0, 18),
+    tees: Object.keys(c.tees || {}).map(n => ({
+      name: n, cr: c.tees[n].cr, slope: c.tees[n].slope })),
+  };
+  if (!editing.tees.length) editing.tees.push({ name:'', cr:'', slope:'' });
+}
+
+function siProblems(si){
+  const seen = {};
+  si.forEach(v => { if (v != null) seen[v] = (seen[v] || 0) + 1; });
+  return si.map((v, i) => v == null || v < 1 || v > 18 || seen[v] > 1);
+}
+
+function renderEditor(){
+  if (!editing) return '';
+  const bad = siProblems(editing.si);
+  const row = (key, label, vals) =>
+    '<div class="nine"><div class="lbl">' + label + '</div><div class="srow">' +
+    vals.map((v, i) =>
+      '<div class="h' + (key === 'si' && bad[i] ? ' bad' : '') + '"><span>' + (i+1) + '</span>' +
+      '<input type="number" inputmode="numeric" data-k="' + key + '" data-i="' + i + '"' +
+      ' value="' + (v == null ? '' : v) + '"></div>').join('') +
+    '<div class="h"><span>' + (key === 'par' ? 'TOT' : '') + '</span><span style="padding:5px 0">' +
+    (key === 'par' ? vals.reduce((a,b) => a + (b||0), 0) : '') + '</span></div></div>';
+
+  const dupes = bad.some(Boolean);
+  return '<div class="sheet">' +
+    '<div class="row"><label>Course<select id="e-course">' +
+      COURSE_NAMES.map(c => '<option value="' + esc(c) + '"' +
+        (c === editing.course ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+    '</select></label></div>' +
+    row('par', 'Par', editing.par) +
+    row('si', 'Stroke index', editing.si) +
+    (dupes ? '<div class="warnrow"><b>Stroke index needs 1 to 18, once each.</b> ' +
+             'The flagged holes are blank, out of range or repeated.</div>' : '') +
+    '<div class="nine"><div class="lbl">Tees &middot; rating and slope are printed on the card</div>' +
+    '<div class="tees">' + editing.tees.map((t, i) =>
+      '<div class="teerow">' +
+        '<input class="nm" placeholder="white" data-t="' + i + '" data-f="name" value="' + esc(t.name || '') + '">' +
+        '<input class="num" placeholder="CR 70.1" data-t="' + i + '" data-f="cr" value="' + (t.cr === '' || t.cr == null ? '' : t.cr) + '">' +
+        '<input class="num" placeholder="Slope 125" data-t="' + i + '" data-f="slope" value="' + (t.slope === '' || t.slope == null ? '' : t.slope) + '">' +
+        '<button type="button" data-drop="' + i + '">Remove</button>' +
+      '</div>').join('') + '</div>' +
+    '<button class="btn ghost" type="button" id="e-addtee" style="margin-top:7px">Add a tee</button></div>' +
+    '<div class="foot">' +
+      '<span class="run">' + editing.tees.filter(t => t.name && t.cr && t.slope).length +
+      ' rated tee(s)</span>' +
+      '<button class="btn ghost" type="button" id="e-cancel">Cancel</button>' +
+      '<button class="btn" type="button" id="e-save"' + (dupes ? ' disabled' : '') + '>Save card</button>' +
+    '</div></div>';
+}
+
+function wireEditor(){
+  const open = $('e-open');
+  if (open) open.onclick = () => { openEditor(editing ? editing.course : COURSE_NAMES[0]); render(); };
+  if (!editing) return;
+
+  const sel = $('e-course');
+  if (sel) sel.onchange = e => { openEditor(e.target.value); render(); };
+
+  document.querySelectorAll('#roundsview .srow input').forEach(inp => {
+    inp.oninput = () => {
+      const v = parseInt(inp.value, 10);
+      editing[inp.dataset.k][+inp.dataset.i] = isNaN(v) ? null : v;
+      if (inp.dataset.k === 'si'){
+        const bad = siProblems(editing.si);
+        document.querySelectorAll('#roundsview .srow input[data-k="si"]').forEach(x => {
+          const cell = x.parentNode;
+          if (cell && cell.classList) cell.classList.toggle('bad', bad[+x.dataset.i]);
+        });
+        const save = $('e-save');
+        if (save) save.disabled = bad.some(Boolean);
+      }
+    };
+  });
+
+  document.querySelectorAll('#roundsview .teerow input').forEach(inp => {
+    inp.oninput = () => {
+      const t = editing.tees[+inp.dataset.t], f = inp.dataset.f;
+      t[f] = f === 'name' ? inp.value.trim() : inp.value;
+    };
+  });
+  document.querySelectorAll('#roundsview .teerow button').forEach(b => {
+    b.onclick = () => { editing.tees.splice(+b.dataset.drop, 1); render(); };
+  });
+
+  const add = $('e-addtee');
+  if (add) add.onclick = () => { editing.tees.push({name:'', cr:'', slope:''}); render(); };
+  const cancel = $('e-cancel');
+  if (cancel) cancel.onclick = () => { editing = null; render(); };
+
+  const save = $('e-save');
+  if (save) save.onclick = () => {
+    const tees = {};
+    editing.tees.forEach(t => {
+      const cr = parseFloat(t.cr), sl = parseInt(t.slope, 10);
+      if (t.name && !isNaN(cr) && !isNaN(sl)) tees[t.name] = { cr, slope: sl };
+    });
+    const card = { par: editing.par.slice(), si: editing.si.slice(), tees, stock: false };
+    CARDS[editing.course] = card;
+    localCards[editing.course] = card;
+    saveCards();
+    editing = null;
+    render();
+    if (getToken() && REPO) pushCards();
+  };
+}
+
+function cardsYaml(){
+  const nl = String.fromCharCode(10);
+  const names = Object.keys(CARDS).filter(n => n !== '__default__' && (CARDS[n].par || []).length);
+  if (!names.length) return 'cards: {}';
+  const q = s => /^[A-Za-z][A-Za-z0-9 ()&.-]*$/.test(s) ? s : JSON.stringify(s);
+  return 'cards:' + nl + names.sort().map(n => {
+    const c = CARDS[n];
+    const tees = Object.keys(c.tees || {});
+    return '  ' + q(n) + ':' + nl +
+      '    par: [' + c.par.join(', ') + ']' + nl +
+      '    si:  [' + c.si.join(', ') + ']' + nl +
+      (tees.length
+        ? '    tees:' + nl + tees.map(tn =>
+            '      ' + q(tn) + ': {cr: ' + c.tees[tn].cr + ', slope: ' + c.tees[tn].slope + '}'
+          ).join(nl)
+        : '    tees: {}');
+  }).join(nl);
+}
+
+function serializeCardsYaml(original){
+  const nl = String.fromCharCode(10);
+  const lines = original.split(nl);
+  let i = lines.length;
+  for (let k = 0; k < lines.length; k++) if (lines[k].startsWith('cards:')){ i = k; break; }
+  return lines.slice(0, i).concat(cardsYaml().split(nl)).join(nl) + nl;
+}
+
+async function pushCards(){
+  if (!getToken() || !REPO) return;
+  sync.state = 'busy'; sync.msg = ''; renderSyncOnly();
+  try {
+    const current = await gh('courses.yaml');
+    const merged = serializeCardsYaml(b64decode(current.content || ''));
+    await gh('courses.yaml', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + getToken(),
+                 'Accept': 'application/vnd.github+json',
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'card: ' + Object.keys(localCards).join(', '),
+                             content: b64encode(merged), sha: current.sha }),
+    });
+    localCards = {}; saveCards();
+    sync.state = 'ok'; sync.at = Date.now();
+  } catch (e) {
+    sync.state = 'error'; sync.msg = e.message;
+  }
+  render();
+}
+
 /* ---------- rounds view ---------- */
 let sheet = null;   // the card being filled in, or null
 
@@ -1458,19 +1650,27 @@ function renderRounds(){
         (rel > 0 ? '+' : '') + rel + '</div></div></div>';
     }).join('');
 
+  const rated = COURSE_NAMES.filter(c => Object.keys((cardFor(c).tees) || {}).length).length;
   const drift = localRounds.length;
   el.innerHTML = syncBar() +
     '<div class="hcaps">' + boards + '</div>' +
     '<div class="roundbar">' +
-      (sheet ? '' : '<button class="btn" type="button" id="r-add">Add a round</button>') +
-      '<span class="hint">Handicap uses the World Handicap System: best ' +
-      'differentials of your last 20 rounds, each hole capped at net double bogey. ' +
-      '18-hole rounds only.</span>' +
+      (sheet || editing ? '' :
+        '<button class="btn" type="button" id="r-add">Add a round</button>' +
+        '<button class="btn ghost" type="button" id="e-open">Course cards</button>') +
+      '<span class="hint">' + rated + ' of ' + COURSE_NAMES.length + ' courses rated. ' +
+      'Handicap uses the World Handicap System: best differentials of your last 20 ' +
+      'rounds, each hole capped at net double bogey. 18-hole rounds only.</span>' +
     '</div>' +
-    renderSheet() +
+    renderSheet() + renderEditor() +
     (rows ? '<div class="rnds">' + rows + '</div>'
           : '<div class="empty"><h3>No rounds yet</h3><p>Add one and the handicap starts ' +
             'building. It needs three rounds before it can show an index.</p></div>') +
+    (Object.keys(localCards).length && !getToken()
+      ? '<div class="unsaved"><span><b>' + Object.keys(localCards).length +
+        ' course card(s) on this device only.</b> Paste into courses.yaml and commit.</span>' +
+        '<button type="button" id="c-export">Copy for courses.yaml</button>' +
+        '<textarea class="yaml" id="c-yaml" readonly>' + esc(cardsYaml()) + '</textarea></div>' : '') +
     (drift && !getToken() ? '<div class="unsaved"><span><b>' + drift +
       (drift === 1 ? ' round' : ' rounds') + ' on this device only.</b> ' +
       'Turn on sync above, or paste this into rounds.yaml and commit.</span>' +
@@ -1479,6 +1679,7 @@ function renderRounds(){
 
   wireSync();
   wireRounds();
+  wireEditor();
 }
 
 function wireRounds(){
@@ -1548,6 +1749,15 @@ function wireRounds(){
     sheet = null;
     render();
     if (getToken() && REPO) pushRounds();
+  };
+
+  const cex = $('c-export');
+  if (cex) cex.onclick = () => {
+    const box = $('c-yaml');
+    box.select();
+    try { navigator.clipboard.writeText(box.value); } catch (e) {
+      try { document.execCommand('copy'); } catch (e2) {} }
+    cex.textContent = 'Copied';
   };
 
   const ex = $('r-export');

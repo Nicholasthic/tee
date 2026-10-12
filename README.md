@@ -256,6 +256,16 @@ Everything there is printed on the card in the pro shop. A course with no
 entry falls back to a generic par 72 and the app says so — that placeholder
 makes birdie counts and the net double bogey cap wrong, so correct it.
 
+Easiest way in is **Course cards** on the Rounds tab: pick a course, type the
+par and stroke index rows off the card, add a tee with its rating and slope.
+Stroke index is validated as you type — it has to be 1 to 18, once each — and
+it saves to `courses.yaml` through the same sync as everything else.
+
+Don't take ratings off the golf aggregator sites. They disagree with each
+other: for Palmer Colonial one lists Course Rating 71.0 and another 73.2 for
+the same tee, and they don't agree on par either. A wrong rating shifts every
+differential, so the number on the physical card is the one to use.
+
 **Course Rating and Slope have no sensible default.** A round at an unrated
 course is still recorded and shown, but it cannot count toward an index, and
 the round is marked `course not rated` rather than quietly guessing.
