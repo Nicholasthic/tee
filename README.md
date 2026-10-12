@@ -281,7 +281,12 @@ you are from the middle of the green.
 python3 holes.py            # fetch anything missing
 python3 holes.py --list     # just show which OSM course matched which club
 python3 holes.py --refresh  # re-fetch everything
+python3 holes.py --refresh "The Glades"      # just this one
 ```
+
+A course OSM has no holes for is remembered as such, so a plain re-run
+doesn't ask about it again. Map one yourself and you want the named
+`--refresh` to pick it up.
 
 Run it by hand, not from the workflow. Layouts change about never, and
 Overpass is a shared service that spends a good part of the day returning

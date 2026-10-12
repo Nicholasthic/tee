@@ -3,7 +3,10 @@
 holes.py - pull hole geometry from OpenStreetMap into holes.yaml.
 
     python3 holes.py            fetch anything missing, write holes.yaml
-    python3 holes.py --refresh  re-fetch courses already in holes.yaml
+    python3 holes.py --refresh  re-fetch every course
+    python3 holes.py --refresh "The Glades"
+                                re-fetch one, for when somebody has just
+                                mapped it in OSM and you want it now
     python3 holes.py --list     just show the OSM course match-up, fetch nothing
 
 Run it by hand, not from the workflow. Course layouts change about never, and
@@ -398,8 +401,8 @@ def save(courses: dict, osm: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--refresh", action="store_true",
-                    help="re-fetch courses that already have holes")
+    ap.add_argument("--refresh", nargs="*", metavar="COURSE",
+                    help="re-fetch: all courses, or just the ones named")
     ap.add_argument("--list", action="store_true",
                     help="show the OSM match-up and stop")
     ap.add_argument("--relist", action="store_true",
@@ -456,7 +459,9 @@ def main() -> int:
         # mapped would be refetched on every run forever.
         if done and len(rows_before) not in (9, 18, 27, 36) and not prev.get("box"):
             done = False
-        if not args.refresh and done:
+        if args.refresh is not None and (not args.refresh or name in args.refresh):
+            done = False                           # asked for by name
+        if done:
             print(f"  {name:<32} cached", file=sys.stderr)
             continue
         sel = f"{'rel' if m['type'] == 'rel' else 'way'}(id:{m['id']})"
