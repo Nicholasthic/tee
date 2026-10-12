@@ -1,0 +1,22 @@
+# Rounds played, hole by hole.
+#
+# Scores are gross strokes. The app caps each hole at net double bogey when it
+# works out your handicap, so enter what you actually took — don't pre-adjust.
+#
+# Added from the Rounds tab. Ticking there commits straight back to this file
+# when sync is on, same as played.yaml.
+#
+#   - date: 2026-10-05
+#     course: Palmer Colonial      # must match a course name exactly
+#     player: nick                 # nick or scott
+#     tee: white                   # must match a tee in courses.yaml
+#     strokes: [4,5,3,6,4,4,3,5,5, 4,4,4,5,5,4,3,4,6]
+#     putts:   [2,2,1,2,2,2,1,2,2, 2,2,2,2,2,2,1,2,2]   # optional
+
+golfers:
+  - id: nick
+    name: Nick
+  - id: scott
+    name: Scott
+
+rounds: []

@@ -1,0 +1,27 @@
+# Scorecard data, used to work out handicaps.
+#
+# Everything here is printed on the card in the pro shop. Two parts matter:
+#
+#   par / si   per hole. Par drives birdie and bogey counts; stroke index
+#              decides which holes you get a shot on, which sets the net
+#              double bogey cap on your score.
+#   tees       Course Rating and Slope, per tee. WHS needs both. A round at a
+#              course with no rating is still recorded, but it can't count
+#              toward your handicap index — the app says so rather than
+#              quietly guessing.
+#
+# Anything not listed falls back to `default` below, which is a generic par 72.
+# It is a placeholder, not that course — check it against the real card and
+# correct it, or edit it in the app.
+
+default:
+  par: [4, 4, 3, 5, 4, 4, 3, 4, 5,  4, 4, 3, 5, 4, 4, 3, 4, 5]
+  si:  [5, 1, 17, 11, 3, 7, 15, 9, 13,  6, 2, 18, 12, 4, 8, 16, 10, 14]
+  tees: {}
+
+# course name (must match clubs.yaml / played.yaml exactly):
+#   par:  [18 numbers]
+#   si:   [18 numbers, each of 1-18 once]
+#   tees:
+#     white: {cr: 70.5, slope: 125}
+cards: {}

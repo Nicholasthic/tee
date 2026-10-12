@@ -111,6 +111,75 @@
   :root[data-theme="dark"] .i-moon, .i-sun{display:none}
   :root[data-theme="dark"] .i-sun{display:block}
 
+
+  /* ---- rounds ---- */
+  .hcaps{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+         margin-top:18px}
+  .hcap{background:var(--surface); border:1px solid var(--border);
+        border-radius:var(--radius); padding:13px 15px}
+  .hcap .who{font-size:12px; font-weight:600; letter-spacing:.02em}
+  .hcap .idx{font-size:30px; font-weight:700; letter-spacing:-.035em; margin-top:1px;
+             font-variant-numeric:tabular-nums}
+  .hcap .idx small{font-size:12.5px; font-weight:500; color:var(--faint); letter-spacing:0}
+  .hcap .note{font-size:11px; color:var(--faint); margin-top:3px}
+
+  .roundbar{display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:16px}
+  .roundbar .btn{padding:7px 13px; font-size:12.5px}
+  .roundbar .hint{font-size:12px; color:var(--dim)}
+
+  .rnds{display:flex; flex-direction:column; gap:7px; margin-top:14px}
+  .rnd{display:flex; align-items:center; gap:12px; background:var(--surface);
+       border:1px solid var(--border); border-radius:11px; padding:10px 13px; min-width:0}
+  .rnd .when{font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums;
+             white-space:nowrap; width:52px; flex:none}
+  .rnd .where{flex:1; min-width:0}
+  .rnd .where .c{font-size:13px; font-weight:600; letter-spacing:-.01em;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .rnd .where .m{font-size:10.5px; color:var(--faint); font-variant-numeric:tabular-nums}
+  .rnd .sc{text-align:right; flex:none; font-variant-numeric:tabular-nums}
+  .rnd .sc .g{font-size:17px; font-weight:700; letter-spacing:-.02em}
+  .rnd .sc .p{font-size:10.5px; color:var(--faint)}
+  .rnd .sc .p.over{color:var(--flag)} .rnd .sc .p.under{color:var(--accent)}
+  .rnd.uncounted{border-style:dashed; opacity:.8}
+
+  .sheet{background:var(--surface); border:1px solid var(--border);
+         border-radius:var(--radius); padding:14px; margin-top:14px}
+  .sheet .row{display:flex; gap:9px; flex-wrap:wrap; margin-bottom:11px}
+  .sheet label{display:flex; flex-direction:column; gap:4px; font-size:10px;
+               letter-spacing:.1em; text-transform:uppercase; color:var(--faint);
+               flex:1; min-width:118px}
+  .sheet select, .sheet input[type=date]{
+    font:inherit; font-size:13px; padding:7px 9px; color:var(--text);
+    background:var(--bg); border:1px solid var(--border2); border-radius:9px; width:100%}
+  .nine{margin-top:4px}
+  .nine .lbl{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9.5px;
+             letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-bottom:4px}
+  .holes{display:grid; grid-template-columns:repeat(10,1fr); gap:3px}
+  .hole{display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0}
+  .hole .n{font-size:9.5px; color:var(--faint); font-variant-numeric:tabular-nums}
+  .hole .pr{font-size:9px; color:var(--faint); opacity:.75}
+  .hole input{
+    width:100%; min-width:0; text-align:center; font:inherit; font-size:14px; font-weight:600;
+    padding:6px 0; color:var(--text); background:var(--bg);
+    border:1px solid var(--border2); border-radius:7px;
+    font-variant-numeric:tabular-nums; -moz-appearance:textfield;
+  }
+  .hole input::-webkit-outer-spin-button,
+  .hole input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0}
+  .hole input:focus{border-color:var(--accent); outline:none}
+  .hole.sub input{border-color:var(--accent-line); background:var(--accent-bg); color:var(--accent)}
+  .hole.over input{border-color:var(--flag)}
+  .hole.tot .v{width:100%; text-align:center; font-size:14px; font-weight:700;
+               padding:6px 0; font-variant-numeric:tabular-nums}
+  .sheet .foot{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:13px}
+  .sheet .foot .run{font-size:13px; color:var(--dim); font-variant-numeric:tabular-nums}
+  .sheet .foot .run b{color:var(--text); font-weight:650; font-size:15px}
+  .sheet .foot .btn{margin-left:auto}
+  .sheet .ghost{background:transparent; color:var(--dim); border:1px solid var(--border2)}
+  .warnrow{background:var(--sand-bg); border:1px solid var(--sand-line); color:var(--sand);
+           border-radius:10px; padding:9px 12px; font-size:12px; margin-top:11px}
+  .warnrow b{color:var(--text); font-weight:650}
+
   /* ---- view tabs ---- */
   .tabs{display:flex; gap:4px; padding:12px 0 0}
   .tabs button{
@@ -516,6 +585,7 @@
     <div id="ring"></div>
   </div>
   <div id="coursesview" hidden></div>
+  <div id="roundsview" hidden></div>
   <footer>
     <div class="failed" id="failed" hidden></div>
     <span>Public tee sheets · tap a time to book</span>
@@ -528,6 +598,9 @@ const DATA = [{"club":"Palmer Gold Coast","drive":10,"day":"2026-10-12","time":"
 const CONTACTS = [{"club":"Southport Golf Club","drive":25,"phone":"+61755711444","phoneText":"(07) 5571 1444","url":"https://www.chronogolf.com/club/southport-golf-club","note":"Books through Chronogolf"}];
 const COURSES = [{"club":"Lakelands Golf Club","drive":10,"scanned":false,"note":"members and guests","done":false},{"club":"Palmer Colonial","drive":10,"scanned":true,"note":"","done":true},{"club":"Palmer Gold Coast","drive":10,"scanned":true,"note":"","done":true},{"club":"The Glades","drive":10,"scanned":true,"note":"","done":true},{"club":"Emerald Lakes","drive":12,"scanned":true,"note":"","done":true},{"club":"Palm Meadows","drive":12,"scanned":true,"note":"","done":true},{"club":"Boomerang Farm","drive":15,"scanned":false,"note":"9 holes","done":true},{"club":"RACV Royal Pines","drive":15,"scanned":true,"note":"","done":false},{"club":"Surfers Paradise Golf Club","drive":15,"scanned":true,"note":"","done":true},{"club":"Tallai Country Golf Club","drive":15,"scanned":false,"note":"","done":true},{"club":"The Grand Golf Club","drive":15,"scanned":false,"note":"private","done":false},{"club":"Burleigh Golf Club","drive":20,"scanned":false,"note":"private","done":false},{"club":"Helensvale Golf Club","drive":20,"scanned":false,"note":"","done":false},{"club":"Lakeside Golf Club","drive":20,"scanned":false,"note":"","done":false},{"club":"Parkwood Village","drive":20,"scanned":true,"note":"","done":true},{"club":"Burleigh Palms Golf Club","drive":25,"scanned":false,"note":"9 holes","done":false},{"club":"Links Hope Island","drive":25,"scanned":true,"note":"","done":false},{"club":"Meadow Park Golf Club","drive":25,"scanned":false,"note":"","done":false},{"club":"Sanctuary Cove \u2014 The Palms","drive":25,"scanned":false,"note":"members and resort guests","done":false},{"club":"Sanctuary Cove \u2014 The Pines","drive":25,"scanned":false,"note":"members and resort guests","done":false},{"club":"Southport Golf Club","drive":25,"scanned":false,"note":"book by phone","done":false},{"club":"Tallebudgera Golf Club","drive":25,"scanned":false,"note":"","done":true},{"club":"Tally Valley Golf Club","drive":25,"scanned":false,"note":"9 holes","done":false},{"club":"Canungra Area Golf Club","drive":30,"scanned":false,"note":"","done":false},{"club":"Club Banora (NSW)","drive":30,"scanned":false,"note":"","done":false},{"club":"Chinderah Golf Course (NSW)","drive":35,"scanned":false,"note":"","done":false},{"club":"Coolangatta & Tweed Heads","drive":35,"scanned":true,"note":"","done":false},{"club":"Gainsborough Greens","drive":35,"scanned":true,"note":"","done":true},{"club":"Cabarita Beach Golf Club (NSW)","drive":40,"scanned":false,"note":"9 holes","done":false},{"club":"Tamborine Mountain","drive":40,"scanned":false,"note":"walking only","done":true},{"club":"Carbrook","drive":45,"scanned":true,"note":"","done":false},{"club":"Meadowbrook","drive":45,"scanned":true,"note":"","done":false},{"club":"Murwillumbah (NSW)","drive":45,"scanned":true,"note":"","done":false},{"club":"Pottsville Golf Course (NSW)","drive":45,"scanned":false,"note":"9 holes","done":false},{"club":"Windaroo Lakes","drive":45,"scanned":true,"note":"","done":false},{"club":"Beaudesert Golf Club","drive":50,"scanned":false,"note":"","done":false}];
 const PROBLEMS = [];
+const ROUNDS = [];
+const CARDS = {"__default__":{"par":[4,4,3,5,4,4,3,4,5,4,4,3,5,4,4,3,4,5],"si":[5,1,17,11,3,7,15,9,13,6,2,18,12,4,8,16,10,14],"tees":{},"stock":true}};
+const GOLFERS = [{"id":"nick","name":"Nick"},{"id":"scott","name":"Scott"}];
 const REPO = "Nicholasthic/tee";
 const BUILT = "2026-10-11T23:25:05.602285+00:00";
 
@@ -586,7 +659,7 @@ function restore(){
     if (s.day === 'all' || ALL_DAYS.indexOf(s.day) > -1) out.day = s.day;
     if (PLAYERS.indexOf(s.players) > -1) out.players = s.players;
     if (SORTS.some(x => x[0] === s.sort)) out.sort = s.sort;
-    if (s.view === 'times' || s.view === 'courses') out.view = s.view;
+    if (['times','courses','rounds'].indexOf(s.view) > -1) out.view = s.view;
     if (['all','todo','done'].indexOf(s.only) > -1) out.only = s.only;
     if (typeof s.tmin === 'number') out.tmin = Math.min(Math.max(s.tmin, T_LO), T_HI);
     if (typeof s.tmax === 'number') out.tmax = Math.min(Math.max(s.tmax, T_LO), T_HI);
@@ -827,6 +900,107 @@ function renderList(){
   });
 
   list.innerHTML = html;
+}
+
+/* ---------- World Handicap System ----------
+   Score Differential = (113 / Slope) x (Adjusted Gross - Course Rating).
+   PCC is a daily adjustment only a governing body can issue, so it is 0.
+   The index is the average of the lowest N differentials of the last 20
+   rounds; N and any extra adjustment come from the short-record table. */
+const WHS_TABLE = [
+  [3,1,-2.0],[4,1,-1.0],[5,1,0],[6,2,-1.0],[7,2,0],[8,2,0],
+  [9,3,0],[10,3,0],[11,3,0],[12,4,0],[13,4,0],[14,4,0],
+  [15,5,0],[16,5,0],[17,6,0],[18,6,0],[19,7,0],[20,8,0],
+];
+function whsRule(n){
+  if (n < 3) return null;
+  if (n >= 20) return { take:8, adjust:0 };
+  const row = WHS_TABLE.find(r => r[0] === n);
+  return row ? { take:row[1], adjust:row[2] } : null;
+}
+/* Everyone gets floor(ch/holes); the hardest (ch mod holes) get one more. */
+function strokesOnHole(ch, si, holes){
+  ch = Math.round(ch);
+  if (!si) return 0;
+  if (ch >= 0) return Math.floor(ch / holes) + (si <= (ch % holes) ? 1 : 0);
+  const g = Math.abs(ch);
+  return -(Math.floor(g / holes) + (si > holes - (g % holes) ? 1 : 0));
+}
+function courseHandicap(index, slope, cr, par){
+  if (index === null || slope == null || cr == null || par == null) return null;
+  return index * (slope / 113) + (cr - par);
+}
+/* Each hole caps at net double bogey. No index yet means par + 5, which is
+   what WHS says to use for a first card. */
+function adjustedGross(strokes, par, si, index, slope, cr){
+  const holes = strokes.length;
+  const totalPar = par.slice(0, holes).reduce((a,b) => a+b, 0);
+  const ch = courseHandicap(index, slope, cr, totalPar);
+  let total = 0;
+  for (let i = 0; i < holes; i++){
+    const s = strokes[i];
+    if (s == null) continue;
+    const cap = ch === null ? par[i] + 5 : par[i] + 2 + strokesOnHole(ch, si[i], holes);
+    total += Math.min(s, cap);
+  }
+  return total;
+}
+function differential(ags, cr, slope){
+  if (cr == null || slope == null) return null;
+  return Math.round(((113 / slope) * (ags - cr)) * 10) / 10;
+}
+/* Truncated, not rounded: 12.39 is 12.3. */
+function handicapIndex(diffs){
+  const recent = diffs.slice(-20);
+  const rule = whsRule(recent.length);
+  if (!rule) return null;
+  const best = recent.slice().sort((a,b) => a-b).slice(0, rule.take);
+  return Math.trunc((best.reduce((a,b)=>a+b,0) / best.length + rule.adjust) * 10) / 10;
+}
+
+/* ---------- rounds ---------- */
+let localRounds = [];
+try { localRounds = JSON.parse(localStorage.getItem('tee.rounds') || '[]'); } catch (e) { localRounds = []; }
+const saveRounds = () => { try { localStorage.setItem('tee.rounds', JSON.stringify(localRounds)); } catch (e) {} };
+const allRounds = () => ROUNDS.concat(localRounds);
+
+const cardFor = course => CARDS[course] || CARDS.__default__;
+const COURSE_NAMES = COURSES.map(c => c.club);
+
+function roundInfo(r){
+  const card = cardFor(r.course);
+  const holes = (r.strokes || []).length;
+  const par = (card.par || []).slice(0, holes);
+  const si = (card.si || []).slice(0, holes);
+  const gross = (r.strokes || []).reduce((a,b) => a + (b || 0), 0);
+  const totalPar = par.reduce((a,b) => a+b, 0);
+  const tee = ((card.tees || {})[r.tee]) || null;
+  return { card, holes, par, si, gross, totalPar, toPar: gross - totalPar, tee };
+}
+
+/* Work forward in date order: each round is capped using the index you held
+   *before* you played it, which is what WHS does. */
+function playerRecord(id){
+  const rs = allRounds()
+    .filter(r => r.player === id && (r.strokes || []).length === 18)
+    .sort((a,b) => String(a.date).localeCompare(String(b.date)));
+  const diffs = [];
+  let index = null;
+  const perRound = {};
+  rs.forEach(r => {
+    const info = roundInfo(r);
+    if (!info.tee || info.tee.cr == null || info.tee.slope == null){
+      perRound[r.date + r.course] = { counted:false, why:'course not rated' };
+      return;
+    }
+    const ags = adjustedGross(r.strokes, info.par, info.si, index, info.tee.slope, info.tee.cr);
+    const d = differential(ags, info.tee.cr, info.tee.slope);
+    diffs.push(d);
+    index = handicapIndex(diffs);
+    perRound[r.date + r.course] = { counted:true, ags, diff:d };
+  });
+  return { index, counted: diffs.length, perRound,
+           played: allRounds().filter(r => r.player === id).length };
 }
 
 /* ---------- courses played ----------
@@ -1118,11 +1292,281 @@ function renderSyncOnly(){
   if (open && $('syncpanel')) $('syncpanel').hidden = false;
 }
 
+function roundsYaml(){
+  const nl = String.fromCharCode(10);
+  const all = allRounds();
+  if (!all.length) return 'rounds: []';
+  const q = s => /^[A-Za-z][A-Za-z0-9 ()&.-]*$/.test(s) ? s : JSON.stringify(s);
+  return 'rounds:' + nl + all.map(r =>
+    '  - date: ' + r.date + nl +
+    '    course: ' + q(r.course) + nl +
+    '    player: ' + r.player + nl +
+    (r.tee ? '    tee: ' + q(r.tee) + nl : '') +
+    '    strokes: [' + r.strokes.join(', ') + ']'
+  ).join(nl);
+}
+
+function serializeRoundsYaml(original){
+  const nl = String.fromCharCode(10);
+  const lines = original.split(nl);
+  let i = lines.length;
+  for (let k = 0; k < lines.length; k++) if (lines[k].startsWith('rounds:')){ i = k; break; }
+  return lines.slice(0, i).concat(roundsYaml().split(nl)).join(nl) + nl;
+}
+
+/* Same write path as played.yaml: re-read for the current sha, merge, PUT. */
+async function pushRounds(){
+  if (!getToken() || !REPO) return;
+  sync.state = 'busy'; sync.msg = ''; renderSyncOnly();
+  try {
+    const current = await gh('rounds.yaml');
+    const merged = serializeRoundsYaml(b64decode(current.content || ''));
+    await gh('rounds.yaml', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + getToken(),
+                 'Accept': 'application/vnd.github+json',
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'round: ' + allRounds().length + ' recorded',
+                             content: b64encode(merged), sha: current.sha }),
+    });
+    // committed, so it is no longer a local-only round
+    ROUNDS.push.apply(ROUNDS, localRounds);
+    localRounds = []; saveRounds();
+    sync.state = 'ok'; sync.at = Date.now();
+  } catch (e) {
+    sync.state = 'error'; sync.msg = e.message;   // the round survives locally
+  }
+  render();
+}
+
+/* ---------- rounds view ---------- */
+let sheet = null;   // the card being filled in, or null
+
+function newSheet(){
+  const today = new Date().toISOString().slice(0,10);
+  return { date: today, course: COURSE_NAMES[0] || '', player: (GOLFERS[0]||{}).id || '',
+           tee: '', strokes: new Array(18).fill(null) };
+}
+
+function teeOptions(course){
+  return Object.keys((cardFor(course).tees) || {});
+}
+
+function renderSheet(){
+  if (!sheet) return '';
+  const card = cardFor(sheet.course);
+  const par = card.par || [];
+  const tees = teeOptions(sheet.course);
+  if (sheet.tee && tees.indexOf(sheet.tee) < 0) sheet.tee = '';
+  if (!sheet.tee && tees.length) sheet.tee = tees[0];
+
+  const nine = (from, label) => {
+    const idx = [];
+    for (let i = from; i < from + 9; i++) idx.push(i);
+    const sub = idx.reduce((a,i) => a + (sheet.strokes[i] || 0), 0);
+    return '<div class="nine"><div class="lbl">' + label + '</div><div class="holes">' +
+      idx.map(i => {
+        const s = sheet.strokes[i], pv = par[i];
+        const cls = s == null || pv == null ? '' : (s < pv ? ' sub' : (s > pv + 1 ? ' over' : ''));
+        return '<div class="hole' + cls + '"><span class="n">' + (i+1) + '</span>' +
+          '<input type="number" inputmode="numeric" min="1" max="20" data-hole="' + i + '"' +
+          ' value="' + (s == null ? '' : s) + '" aria-label="Hole ' + (i+1) + '">' +
+          '<span class="pr">' + (pv == null ? '' : pv) + '</span></div>';
+      }).join('') +
+      '<div class="hole tot"><span class="n">' + (from ? 'IN' : 'OUT') + '</span>' +
+      '<span class="v" id="sub-' + from + '">' + (sub || '') + '</span><span class="pr">' +
+      par.slice(from, from+9).reduce((a,b)=>a+b,0) + '</span></div></div>';
+  };
+
+  const entered = sheet.strokes.filter(s => s != null).length;
+  const gross = sheet.strokes.reduce((a,b) => a + (b||0), 0);
+  const totalPar = par.reduce((a,b)=>a+b,0);
+  const rel = gross - totalPar;
+
+  let warn = '';
+  if (card.stock) warn += '<div class="warnrow"><b>Using the placeholder card.</b> ' +
+    'Par and stroke index for ' + esc(sheet.course) + ' are a generic par 72, not that course. ' +
+    'Fix them in courses.yaml so birdies and the net double bogey cap are right.</div>';
+  if (!tees.length) warn += '<div class="warnrow"><b>No Course Rating for ' + esc(sheet.course) +
+    '.</b> The round will be saved, but it cannot count toward a handicap until a tee with ' +
+    'cr and slope is added to courses.yaml. Both are printed on the scorecard.</div>';
+
+  return '<div class="sheet">' +
+    '<div class="row">' +
+      '<label>Date<input type="date" id="s-date" value="' + esc(sheet.date) + '"></label>' +
+      '<label>Player<select id="s-player">' + GOLFERS.map(g =>
+        '<option value="' + esc(g.id) + '"' + (g.id === sheet.player ? ' selected' : '') + '>' +
+        esc(g.name) + '</option>').join('') + '</select></label>' +
+    '</div>' +
+    '<div class="row">' +
+      '<label>Course<select id="s-course">' + COURSE_NAMES.map(c =>
+        '<option value="' + esc(c) + '"' + (c === sheet.course ? ' selected' : '') + '>' +
+        esc(c) + '</option>').join('') + '</select></label>' +
+      '<label>Tee<select id="s-tee">' + (tees.length
+        ? tees.map(x => '<option value="' + esc(x) + '"' + (x === sheet.tee ? ' selected' : '') +
+            '>' + esc(x) + '</option>').join('')
+        : '<option value="">none rated</option>') + '</select></label>' +
+    '</div>' +
+    nine(0, 'Out') + nine(9, 'In') + warn +
+    '<div class="foot">' +
+      '<span class="run">' + entered + ' of 18 &middot; <b>' + (gross || '—') + '</b>' +
+      (entered === 18 ? ' (' + (rel > 0 ? '+' : '') + rel + ')' : '') + '</span>' +
+      '<button class="btn ghost" type="button" id="s-cancel">Cancel</button>' +
+      '<button class="btn" type="button" id="s-save"' + (entered === 18 ? '' : ' disabled') +
+      '>Save round</button>' +
+    '</div></div>';
+}
+
+function renderRounds(){
+  const el = $('roundsview');
+
+  const boards = GOLFERS.map(g => {
+    const rec = playerRecord(g.id);
+    const left = rec.index === null ? Math.max(0, 3 - rec.counted) : 0;
+    return '<div class="hcap"><div class="who">' + esc(g.name) + '</div>' +
+      '<div class="idx">' + (rec.index === null ? '—' : rec.index.toFixed(1)) +
+      ' <small>' + (rec.index === null ? 'no index yet' : 'index') + '</small></div>' +
+      '<div class="note">' + rec.played + (rec.played === 1 ? ' round' : ' rounds') +
+      ' &middot; ' + rec.counted + ' counting' +
+      (left ? ' &middot; ' + left + ' more to get an index' : '') + '</div></div>';
+  }).join('');
+
+  const recs = {};
+  GOLFERS.forEach(g => { recs[g.id] = playerRecord(g.id); });
+
+  const rows = allRounds()
+    .slice().sort((a,b) => String(b.date).localeCompare(String(a.date)))
+    .map(r => {
+      const info = roundInfo(r);
+      const who = (GOLFERS.find(g => g.id === r.player) || {}).name || r.player;
+      const mark = (recs[r.player] || {perRound:{}}).perRound[r.date + r.course];
+      const counted = mark && mark.counted;
+      const rel = info.toPar;
+      const d = new Date(r.date + 'T00:00:00');
+      const when = isNaN(d) ? esc(String(r.date))
+        : d.toLocaleDateString('en-AU', { day:'numeric', month:'short' });
+      return '<div class="rnd' + (counted ? '' : ' uncounted') + '">' +
+        '<span class="when">' + when + '</span>' +
+        '<div class="where"><div class="c">' + esc(r.course) + '</div>' +
+        '<div class="m">' + esc(who) + (r.tee ? ' &middot; ' + esc(r.tee) : '') +
+        (info.holes !== 18 ? ' &middot; ' + info.holes + ' holes' : '') +
+        (counted ? ' &middot; diff ' + mark.diff.toFixed(1)
+                 : ' &middot; ' + ((mark && mark.why) || 'not counted')) +
+        '</div></div>' +
+        '<div class="sc"><div class="g">' + info.gross + '</div>' +
+        '<div class="p ' + (rel > 0 ? 'over' : rel < 0 ? 'under' : '') + '">' +
+        (rel > 0 ? '+' : '') + rel + '</div></div></div>';
+    }).join('');
+
+  const drift = localRounds.length;
+  el.innerHTML = syncBar() +
+    '<div class="hcaps">' + boards + '</div>' +
+    '<div class="roundbar">' +
+      (sheet ? '' : '<button class="btn" type="button" id="r-add">Add a round</button>') +
+      '<span class="hint">Handicap uses the World Handicap System: best ' +
+      'differentials of your last 20 rounds, each hole capped at net double bogey. ' +
+      '18-hole rounds only.</span>' +
+    '</div>' +
+    renderSheet() +
+    (rows ? '<div class="rnds">' + rows + '</div>'
+          : '<div class="empty"><h3>No rounds yet</h3><p>Add one and the handicap starts ' +
+            'building. It needs three rounds before it can show an index.</p></div>') +
+    (drift && !getToken() ? '<div class="unsaved"><span><b>' + drift +
+      (drift === 1 ? ' round' : ' rounds') + ' on this device only.</b> ' +
+      'Turn on sync above, or paste this into rounds.yaml and commit.</span>' +
+      '<button type="button" id="r-export">Copy for rounds.yaml</button>' +
+      '<textarea class="yaml" id="r-yaml" readonly>' + esc(roundsYaml()) + '</textarea></div>' : '');
+
+  wireSync();
+  wireRounds();
+}
+
+function wireRounds(){
+  const add = $('r-add');
+  if (add) add.onclick = () => { sheet = newSheet(); render(); };
+
+  const bind = (id, fn) => { const e = $(id); if (e) e.onchange = fn; };
+  bind('s-date',   e => { sheet.date = e.target.value; });
+  bind('s-player', e => { sheet.player = e.target.value; });
+  bind('s-tee',    e => { sheet.tee = e.target.value; });
+  bind('s-course', e => { sheet.course = e.target.value; sheet.tee = ''; render(); });
+
+  document.querySelectorAll('#roundsview .hole input').forEach(inp => {
+    inp.oninput = () => {
+      const v = parseInt(inp.value, 10);
+      const h = +inp.dataset.hole;
+      const s = (isNaN(v) || v < 1) ? null : Math.min(v, 20);
+      sheet.strokes[h] = s;
+
+      // recolour this hole, and refresh the nine it belongs to
+      const par = cardFor(sheet.course).par || [];
+      const cell = inp.parentNode;
+      if (cell && cell.classList){
+        cell.classList.remove('sub', 'over');
+        if (s != null && par[h] != null){
+          if (s < par[h]) cell.classList.add('sub');
+          else if (s > par[h] + 1) cell.classList.add('over');
+        }
+      }
+      [0, 9].forEach(from => {
+        const box = $('sub-' + from);
+        if (!box) return;
+        let n = 0;
+        for (let i = from; i < from + 9; i++) n += sheet.strokes[i] || 0;
+        box.textContent = n || '';
+      });
+
+      const foot = document.querySelector('#roundsview .sheet .foot');
+      if (foot){
+        const entered = sheet.strokes.filter(s => s != null).length;
+        const gross = sheet.strokes.reduce((a,b) => a + (b||0), 0);
+        const totalPar = par.reduce((a,b)=>a+b,0);
+        const rel = gross - totalPar;
+        foot.querySelector('.run').innerHTML = entered + ' of 18 &middot; <b>' +
+          (gross || '—') + '</b>' + (entered === 18 ? ' (' + (rel>0?'+':'') + rel + ')' : '');
+        const save = $('s-save');
+        if (save) save.disabled = entered !== 18;
+      }
+    };
+    // advance to the next hole as soon as a sensible score is in
+    inp.onkeyup = ev => {
+      if (ev.key !== 'Enter') return;
+      const all = [...document.querySelectorAll('#roundsview .hole input')];
+      const next = all[all.indexOf(inp) + 1];
+      if (next) next.focus();
+    };
+  });
+
+  const cancel = $('s-cancel');
+  if (cancel) cancel.onclick = () => { sheet = null; render(); };
+
+  const save = $('s-save');
+  if (save) save.onclick = () => {
+    localRounds.push({ date: sheet.date, course: sheet.course, player: sheet.player,
+                       tee: sheet.tee || null, strokes: sheet.strokes.slice() });
+    saveRounds();
+    sheet = null;
+    render();
+    if (getToken() && REPO) pushRounds();
+  };
+
+  const ex = $('r-export');
+  if (ex) ex.onclick = () => {
+    const box = $('r-yaml');
+    box.select();
+    try { navigator.clipboard.writeText(box.value); } catch (e) {
+      try { document.execCommand('copy'); } catch (e2) {} }
+    ex.textContent = 'Copied';
+  };
+}
+
 function renderTabs(){
   const el = $('tabs');
   const left = COURSES.filter(c => !hasPlayed(c.club)).length;
+  const rounds = allRounds().length;
   const defs = [['times', 'Tee times', DATA.length.toLocaleString()],
-                ['courses', 'Courses', left + ' to play']];
+                ['courses', 'Courses', left + ' to play'],
+                ['rounds', 'Rounds', rounds ? String(rounds) : 'new']];
   el.innerHTML = '';
   defs.forEach(([k, label, tally]) => {
     const b = document.createElement('button');
@@ -1162,12 +1606,16 @@ function renderRing(){
 
 function render(){
   const onCourses = state.view === 'courses';
-  $('filterbar').hidden = onCourses;
-  $('timesview').hidden = onCourses;
+  const onRounds = state.view === 'rounds';
+  $('filterbar').hidden = onCourses || onRounds;
+  $('timesview').hidden = onCourses || onRounds;
   $('coursesview').hidden = !onCourses;
+  $('roundsview').hidden = !onRounds;
 
   renderTabs();
-  if (onCourses){
+  if (onRounds){
+    renderRounds();
+  } else if (onCourses){
     renderCourses();
   } else {
     syncControls();

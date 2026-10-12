@@ -218,6 +218,61 @@ messages for 12 hours, so it can't hold state.
 
 ---
 
+## Rounds and handicap
+
+A third tab, **Rounds**. Enter a card hole by hole and it keeps a running
+handicap for each of you.
+
+The maths is the real World Handicap System, not an approximation:
+
+- **Score Differential** = `(113 / Slope) x (Adjusted Gross - Course Rating)`
+- **Adjusted Gross** caps every hole at **net double bogey** — par + 2 + any
+  strokes you get there. With no index yet the cap is par + 5, which is what
+  WHS says to use for a first card.
+- **Handicap Index** is the average of the lowest differentials of your last
+  20 rounds, using the short-record table below 20 (3 rounds: lowest 1 less
+  2.0; 6 rounds: lowest 2 less 1.0; 20 rounds: lowest 8). Truncated, never
+  rounded — 12.39 is 12.3.
+- Rounds are processed in date order, and each is capped using the index you
+  held **before** you played it, which is what the rules require.
+
+It is not an official Golf Australia handicap. It is the same arithmetic on
+your own scores.
+
+### Course data
+
+`courses.yaml` holds the scorecard:
+
+```yaml
+cards:
+  Palmer Colonial:
+    par: [4,4,3,5,4,4,3,4,5, 4,4,3,5,4,4,3,4,5]
+    si:  [5,1,17,11,3,7,15,9,13, 6,2,18,12,4,8,16,10,14]
+    tees:
+      white: {cr: 70.1, slope: 125}
+```
+
+Everything there is printed on the card in the pro shop. A course with no
+entry falls back to a generic par 72 and the app says so — that placeholder
+makes birdie counts and the net double bogey cap wrong, so correct it.
+
+**Course Rating and Slope have no sensible default.** A round at an unrated
+course is still recorded and shown, but it cannot count toward an index, and
+the round is marked `course not rated` rather than quietly guessing.
+
+### Limits
+
+- **18-hole rounds only** count toward the index. Nine-hole rounds can be
+  recorded but are excluded — WHS combines two nines into one differential
+  and that isn't built yet.
+- **PCC is 0.** The daily playing-conditions adjustment can only be issued by
+  a governing body.
+
+Rounds save to `rounds.yaml` through the same sync as `played.yaml`: on this
+device until you turn sync on, then committed straight to the repo.
+
+---
+
 ## The page
 
 `build.py` scans every club and writes a single self-contained `docs/index.html` — no
