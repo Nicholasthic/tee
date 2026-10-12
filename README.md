@@ -270,6 +270,44 @@ differential, so the number on the physical card is the one to use.
 course is still recorded and shown, but it cannot count toward an index, and
 the round is marked `course not rated` rather than quietly guessing.
 
+### Yardages
+
+`holes.py` pulls hole geometry from OpenStreetMap into `holes.yaml` — the
+centre of each green, the hole centreline, par where a mapper tagged it. With
+that in the repo, the scorecard grows a **Use GPS** button that shows how far
+you are from the middle of the green.
+
+```bash
+python3 holes.py            # fetch anything missing
+python3 holes.py --list     # just show which OSM course matched which club
+python3 holes.py --refresh  # re-fetch everything
+```
+
+Run it by hand, not from the workflow. Layouts change about never, and
+Overpass is a shared service that spends a good part of the day returning
+504s — the script backs off, tries three mirrors, and saves after every
+course, so if it dies halfway you just run it again. Committing the result
+also means the app isn't waiting on Overpass while you're standing on a tee
+with one bar of signal.
+
+What it can't give you:
+
+- **Stroke index.** Almost nobody tags `handicap` in OSM. Still a paper-card job.
+- **Course Rating and Slope.** Not in OSM at all.
+- **Front and back of the green.** Only the centre is mapped, so only the
+  centre is shown. No invented numbers.
+- **Clubs with two courses under one name.** Coolangatta & Tweed Heads and
+  Royal Pines come back as one polygon holding two sets of holes numbered
+  1–18, and there is no way to tell which is which. Those are skipped.
+
+The GPS watch is opt-in per round and stops the moment you leave the
+scorecard — `watchPosition` is the most expensive thing a phone can do in
+your pocket for four hours.
+
+Hole maps are © OpenStreetMap contributors, licensed
+[ODbL](https://opendatacommons.org/licenses/odbl/). The page carries that
+credit in the footer whenever it ships with hole data.
+
 ### Limits
 
 - **18-hole rounds only** count toward the index. Nine-hole rounds can be

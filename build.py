@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -177,6 +178,108 @@ def collect_scoring() -> tuple[list[dict], dict, list[dict]]:
 
     cards["__default__"] = {**default, "stock": True}
     return rounds, cards, golfers
+
+
+def _metres(a, b) -> float:
+    lat = math.radians((a[0] + b[0]) / 2)
+    dx = math.radians(b[1] - a[1]) * math.cos(lat)
+    dy = math.radians(b[0] - a[0])
+    return math.hypot(dx, dy) * 6371000
+
+
+def dedupe_holes(holes: list[dict]) -> list[dict]:
+    """Collapse the same hole mapped more than once.
+
+    Palmer Colonial comes back as three overlapping copies of its eighteen -
+    somebody mapped it three times - and only a third of the copies carry a
+    green.
+
+    Two holes are the same hole when they share a green, which is the test
+    that doesn't also merge the 7th of one course with the 7th of the other
+    at a 36-hole club. Where a copy has no green, fall back to the tee, and
+    make it agree on length too, so a short 7th and a long 7th stay apart.
+    """
+    def same(a, b):
+        if a.get("hole") != b.get("hole"):
+            return False
+        if a.get("green") and b.get("green"):
+            return _metres(a["green"], b["green"]) < 40
+        if not (a.get("tee") and b.get("tee")):
+            return False
+        la, lb = a.get("len") or 0, b.get("len") or 0
+        close = abs(la - lb) <= 0.2 * max(la, lb, 1)
+        return _metres(a["tee"], b["tee"]) < 40 and close
+
+    out = []
+    for h in holes:
+        twin = next((k for k in out if same(k, h)), None)
+        if twin is None:
+            out.append(h)
+            continue
+        # keep the better copy: one with a green beats one without
+        better = sorted((twin, h), key=lambda r: (bool(r.get("green")), r.get("len") or 0))[-1]
+        out[out.index(twin)] = better
+    return out
+
+
+def collect_holes() -> dict:
+    """Hole geometry from holes.yaml, for the GPS yardages.
+
+    Only courses with a usable layout go in: whole nines, numbered 1..9 or
+    1..18 with nothing missing, and a green on most of them. A course with
+    three holes mapped is worse than none, because the app would offer a
+    yardage view that mostly says nothing. One hole short of a green is fine -
+    that hole just doesn't get a number.
+
+    A 36-hole club comes back as two courses both numbered 1 to 18, and OSM
+    gives no way to tell which is which. That is fine here: you are standing
+    on one of them, so the nearest hole is your hole and its number is the
+    number on the card. It only rules out the par prefill, which needs one
+    unambiguous eighteen.
+
+    holes.py writes the file by hand from OpenStreetMap. It is optional - the
+    page builds fine without it and simply doesn't offer yardages.
+    """
+    hf = ROOT / "holes.yaml"
+    if not hf.exists():
+        return {}
+    rec = (yaml.safe_load(hf.read_text()) or {}).get("courses") or {}
+
+    out, skipped = {}, []
+    for name, course in rec.items():
+        holes = dedupe_holes(course.get("holes") or [])
+        refs = [h.get("hole") for h in holes]
+        greens = sum(1 for h in holes if h.get("green"))
+
+        loops = 0
+        for m in (27, 18, 9):
+            if len(holes) % m == 0 and sorted(refs) == sorted(
+                    list(range(1, m + 1)) * (len(holes) // m)):
+                loops = len(holes) // m
+                break
+
+        if not loops:
+            why = f"{len(holes)} holes, numbered " + (
+                ", ".join(str(r) for r in sorted(set(refs), key=lambda x: (x is None, x))) or "nothing")
+        elif greens < 0.7 * len(holes):
+            why = f"only {greens} of {len(holes)} greens mapped"
+        else:
+            why = ""
+        if why:
+            skipped.append(f"{name} ({why})")
+            continue
+
+        out[name] = {
+            "at": course.get("at"),
+            "loops": loops,
+            "holes": [{k: h[k] for k in ("hole", "par", "tee", "len", "green", "line")
+                       if h.get(k) is not None} for h in holes],
+        }
+
+    if skipped:
+        print(f"  {len(skipped)} courses have no usable hole map: "
+              + ", ".join(skipped), file=sys.stderr)
+    return out
 
 
 def _cached_page() -> str:
@@ -430,6 +533,27 @@ TEMPLATE = """<!doctype html>
   .warnrow{background:var(--sand-bg); border:1px solid var(--sand-line); color:var(--sand);
            border-radius:10px; padding:9px 12px; font-size:12px; margin-top:11px}
   .warnrow b{color:var(--text); font-weight:650}
+
+  .gps{border:1px solid var(--border2); border-radius:12px; padding:11px 13px;
+       margin-bottom:11px; background:var(--bg)}
+  .gps.live{border-color:var(--accent-line); background:var(--accent-bg)}
+  .gps .top{display:flex; align-items:center; gap:9px}
+  .gps .ttl{font-size:9.5px; letter-spacing:.11em; text-transform:uppercase;
+            color:var(--faint); font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .gps .top .btn{margin-left:auto; font-size:12px; padding:5px 11px}
+  .gps .read{display:flex; align-items:baseline; gap:10px; margin-top:7px}
+  .gps .m{font-size:34px; font-weight:700; letter-spacing:-.03em; line-height:1;
+          color:var(--accent); font-variant-numeric:tabular-nums}
+  .gps .m small{font-size:15px; font-weight:600; margin-left:2px}
+  .gps .where{font-size:12px; color:var(--dim); line-height:1.35}
+  .gps .where b{color:var(--text); font-weight:650}
+  .gps .note{font-size:11.5px; color:var(--faint); margin-top:6px; line-height:1.4}
+  .gps .step{display:flex; gap:6px; margin-top:9px}
+  .gps .step button{font:inherit; font-size:12px; cursor:pointer; color:var(--dim);
+    background:transparent; border:1px solid var(--border2); border-radius:8px;
+    padding:5px 11px}
+  .gps .step button:disabled{opacity:.4; cursor:default}
+  .gps .step .auto{margin-left:auto}
 
 
   .tees{display:flex; flex-direction:column; gap:6px; margin-top:6px}
@@ -859,6 +983,7 @@ TEMPLATE = """<!doctype html>
   <footer>
     <div class="failed" id="failed" hidden></div>
     <span>Public tee sheets · tap a time to book</span>
+    <span id="osmattr" hidden>Hole maps © OpenStreetMap contributors (ODbL)</span>
     <span id="built"></span>
   </footer>
 </main>
@@ -871,6 +996,7 @@ const PROBLEMS = __PROBLEMS__;
 const ROUNDS = __ROUNDS__;
 const CARDS = __CARDS__;
 const GOLFERS = __GOLFERS__;
+const HOLES = __HOLES__;
 const REPO = "__REPO__";
 const BUILT = "__BUILT__";
 
@@ -1638,6 +1764,23 @@ function siProblems(si){
   return si.map((v, i) => v == null || v < 1 || v > 18 || seen[v] > 1);
 }
 
+/* Par off the hole map, but only when OSM has all 18 and they add up to
+   something a golf course would actually be. The stroke index is never in
+   there - almost nobody tags it - so that still comes off the paper card.
+
+   These are mappers' tags, not the card: Palm Meadows adds up to 73 when it
+   is a par 72, so at least one hole there is wrong. The total is on the
+   button for that reason - if it doesn't match the card, don't press it. */
+function osmPar(course){
+  const map = HOLES[course];
+  const holes = holeMap(course);
+  if (!holes || holes.length !== 18 || (map && map.loops > 1)) return null;
+  const par = holes.map(h => h.par);
+  if (par.some(p => !p || p < 3 || p > 6)) return null;
+  const tot = par.reduce((a,b) => a+b, 0);
+  return (tot >= 68 && tot <= 74) ? par : null;
+}
+
 function renderEditor(){
   if (!editing) return '';
   const bad = siProblems(editing.si);
@@ -1657,6 +1800,9 @@ function renderEditor(){
         (c === editing.course ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
     '</select></label></div>' +
     row('par', 'Par', editing.par) +
+    (osmPar(editing.course) ? '<button class="btn ghost" type="button" id="e-osmpar" ' +
+      'style="margin-top:7px">Fill par from the hole map (' +
+      osmPar(editing.course).reduce((a,b) => a+b, 0) + ')</button>' : '') +
     row('si', 'Stroke index', editing.si) +
     (dupes ? '<div class="warnrow"><b>Stroke index needs 1 to 18, once each.</b> ' +
              'The flagged holes are blank, out of range or repeated.</div>' : '') +
@@ -1684,6 +1830,13 @@ function wireEditor(){
 
   const sel = $('e-course');
   if (sel) sel.onchange = e => { openEditor(e.target.value); render(); };
+
+  const op = $('e-osmpar');
+  if (op) op.onclick = () => {
+    const par = osmPar(editing.course);
+    if (par) editing.par = par.slice();
+    render();
+  };
 
   document.querySelectorAll('#roundsview .srow input').forEach(inp => {
     inp.oninput = () => {
@@ -1795,6 +1948,157 @@ function teeOptions(course){
   return Object.keys((cardFor(course).tees) || {});
 }
 
+/* ---------- yardages ----------
+   Hole maps come from OpenStreetMap, pulled into holes.yaml by holes.py. We
+   only have the centre of each green, so that is all this offers — no faked
+   front and back numbers.
+
+   The watch is opt-in. Nobody wants a location prompt for opening a
+   scorecard, and watchPosition is the single most expensive thing a phone
+   can be doing in your pocket for four hours. */
+let gps = { watch: null, pos: null, hole: null, manual: false, err: '' };
+
+function distM(a, b){
+  const R = 6371000, rad = Math.PI / 180;
+  const lat = (a[0] + b[0]) / 2 * rad;
+  const dx = (b[1] - a[1]) * rad * Math.cos(lat);
+  const dy = (b[0] - a[0]) * rad;
+  return Math.sqrt(dx*dx + dy*dy) * R;
+}
+
+function holeMap(course){
+  const m = HOLES[course];
+  return m && m.holes && m.holes.length ? m.holes : null;
+}
+
+function segM(p, a, b){
+  const R = 6371000, rad = Math.PI / 180, cos = Math.cos(a[0] * rad);
+  const m = q => [(q[1] - a[1]) * rad * cos * R, (q[0] - a[0]) * rad * R];
+  const [px, py] = m(p), [bx, by] = m(b);
+  const L = bx*bx + by*by;
+  const t = L === 0 ? 0 : Math.max(0, Math.min(1, (px*bx + py*by) / L));
+  return Math.hypot(px - bx*t, py - by*t);
+}
+
+/* Which hole you are standing on.
+
+   Nearest tee-or-green looks fine until you are 150m down the fairway, where
+   the next hole's tee is closer than either end of your own - it guessed
+   wrong four times out of five there. Measuring to the hole's centreline
+   instead works anywhere on the hole, which is the whole point. */
+function lineM(at, h){
+  const line = h.line || [h.tee, h.green].filter(Boolean);
+  if (line.length === 1) return distM(at, line[0]);
+  let best = Infinity;
+  for (let i = 0; i < line.length - 1; i++)
+    best = Math.min(best, segM(at, line[i], line[i+1]));
+  return best;
+}
+
+function nearestHole(holes, at){
+  let best = null, bd = Infinity;
+  holes.forEach((h, i) => {
+    const d = lineM(at, h);
+    if (d < bd){ bd = d; best = i; }
+  });
+  return bd < 250 ? best : null;
+}
+
+function stopGps(){
+  if (gps.watch != null) navigator.geolocation.clearWatch(gps.watch);
+  gps = { watch: null, pos: null, hole: null, manual: false, err: '' };
+}
+
+function startGps(){
+  if (!navigator.geolocation){ gps.err = 'This browser has no location support.'; paintGps(); return; }
+  gps.err = '';
+  gps.watch = navigator.geolocation.watchPosition(p => {
+    gps.pos = p;
+    gps.err = '';
+    if (!gps.manual){
+      const holes = holeMap(sheet && sheet.course);
+      if (holes) gps.hole = nearestHole(holes, [p.coords.latitude, p.coords.longitude]);
+    }
+    paintGps();
+  }, e => {
+    gps.err = e.code === 1
+      ? 'Location is blocked for this page. Allow it in your browser settings.'
+      : 'Could not get a fix — ' + (e.message || 'no signal') + '.';
+    paintGps();
+  }, { enableHighAccuracy: true, maximumAge: 4000, timeout: 25000 });
+  paintGps();
+}
+
+function gpsBlock(){
+  const holes = holeMap(sheet && sheet.course);
+  if (!holes) return '';
+  return '<div class="gps" id="gps"></div>';
+}
+
+function paintGps(){
+  const el = $('gps');
+  if (!el) return;
+  const holes = holeMap(sheet && sheet.course);
+  if (!holes) return;
+
+  const on = gps.watch != null;
+  el.className = 'gps' + (on && gps.pos && !gps.err ? ' live' : '');
+
+  let body = '';
+  if (!on){
+    const loops = (HOLES[sheet.course] || {}).loops || 1;
+    body = '<div class="note">' + holes.length + ' holes mapped for ' +
+      esc(sheet.course) + (loops > 1 ? ', across its ' + loops + ' courses' : '') +
+      '. Turn this on at the course to see how far you are ' +
+      'from the middle of the green.</div>';
+  } else if (gps.err){
+    body = '<div class="note">' + esc(gps.err) + '</div>';
+  } else if (!gps.pos){
+    body = '<div class="note">Waiting for a fix&hellip;</div>';
+  } else {
+    const at = [gps.pos.coords.latitude, gps.pos.coords.longitude];
+    const i = gps.hole;
+    const h = i == null ? null : holes[i];
+    if (!h){
+      body = '<div class="note">You are not on any mapped hole at ' +
+        esc(sheet.course) + '. Step through the holes below if you want a number anyway.</div>';
+    } else {
+      const d = h.green ? Math.round(distM(at, h.green)) : null;
+      const acc = Math.round(gps.pos.coords.accuracy || 0);
+      body = '<div class="read">' +
+        (d == null ? '<div class="where">No green mapped on this hole.</div>'
+          : '<div class="m">' + d + '<small>m</small></div>') +
+        '<div class="where"><b>Hole ' + (h.hole || (i+1)) + '</b>' +
+        (h.par ? ' &middot; par ' + h.par : '') +
+        (h.len ? ' &middot; ' + h.len + 'm' : '') +
+        '<br>to the middle of the green</div></div>' +
+        '<div class="note">&plusmn;' + acc + 'm from your phone' +
+        (gps.manual ? ' &middot; hole picked by hand' : '') + '</div>';
+    }
+  }
+
+  const i = gps.hole;
+  el.innerHTML =
+    '<div class="top"><span class="ttl">Yardage</span>' +
+      '<button class="btn' + (on ? ' ghost' : '') + '" type="button" id="g-toggle">' +
+      (on ? 'Turn off' : 'Use GPS') + '</button></div>' + body +
+    (on && !gps.err ? '<div class="step">' +
+      '<button type="button" id="g-prev"' + (i ? '' : ' disabled') + '>&lsaquo; prev</button>' +
+      '<button type="button" id="g-next"' +
+        (i != null && i < holes.length - 1 ? '' : ' disabled') + '>next &rsaquo;</button>' +
+      (gps.manual ? '<button type="button" class="auto" id="g-auto">back to auto</button>' : '') +
+      '</div>' : '');
+
+  $('g-toggle').onclick = () => {
+    if (gps.watch != null) stopGps(); else startGps();   // live, not the captured state
+    paintGps();
+  };
+  const step = n => { gps.manual = true; gps.hole = (gps.hole || 0) + n; paintGps(); };
+  if ($('g-prev')) $('g-prev').onclick = () => step(-1);
+  if ($('g-next')) $('g-next').onclick = () => step(1);
+  if ($('g-auto')) $('g-auto').onclick = () => { gps.manual = false; paintGps(); };
+}
+
 function renderSheet(){
   if (!sheet) return '';
   const card = cardFor(sheet.course);
@@ -1850,7 +2154,7 @@ function renderSheet(){
             '>' + esc(x) + '</option>').join('')
         : '<option value="">none rated</option>') + '</select></label>' +
     '</div>' +
-    nine(0, 'Out') + nine(9, 'In') + warn +
+    gpsBlock() + nine(0, 'Out') + nine(9, 'In') + warn +
     '<div class="foot">' +
       '<span class="run">' + entered + ' of 18 &middot; <b>' + (gross || '—') + '</b>' +
       (entered === 18 ? ' (' + (rel > 0 ? '+' : '') + rel + ')' : '') + '</span>' +
@@ -1941,7 +2245,13 @@ function wireRounds(){
   bind('s-date',   e => { sheet.date = e.target.value; });
   bind('s-player', e => { sheet.player = e.target.value; });
   bind('s-tee',    e => { sheet.tee = e.target.value; });
-  bind('s-course', e => { sheet.course = e.target.value; sheet.tee = ''; render(); });
+  bind('s-course', e => {
+    sheet.course = e.target.value; sheet.tee = '';
+    gps.hole = null; gps.manual = false;          // different course, different holes
+    render();
+  });
+
+  paintGps();
 
   document.querySelectorAll('#roundsview .hole input').forEach(inp => {
     inp.oninput = () => {
@@ -1990,13 +2300,14 @@ function wireRounds(){
   });
 
   const cancel = $('s-cancel');
-  if (cancel) cancel.onclick = () => { sheet = null; render(); };
+  if (cancel) cancel.onclick = () => { stopGps(); sheet = null; render(); };
 
   const save = $('s-save');
   if (save) save.onclick = () => {
     localRounds.push({ date: sheet.date, course: sheet.course, player: sheet.player,
                        tee: sheet.tee || null, strokes: sheet.strokes.slice() });
     saveRounds();
+    stopGps();
     sheet = null;
     render();
     if (getToken() && REPO) pushRounds();
@@ -2074,6 +2385,9 @@ function render(){
   $('roundsview').hidden = !onRounds;
 
   renderTabs();
+  // Leaving the scorecard behind means nothing is reading the GPS, so drop
+  // the watch rather than tracking the phone around in the background.
+  if (!onRounds) stopGps();
   if (onRounds){
     renderRounds();
   } else if (onCourses){
@@ -2101,6 +2415,10 @@ function renderFailed(){
     '<ul>' + PROBLEMS.map(m => '<li>' + esc(m) + '</li>').join('') + '</ul>';
 }
 renderFailed();
+
+// ODbL asks for attribution wherever the data is shown, so the credit only
+// appears on a build that actually carries hole maps.
+$('osmattr').hidden = !Object.keys(HOLES).length;
 
 $('built').textContent = ago(BUILT);
 render();
@@ -2150,6 +2468,10 @@ def main() -> int:
     rated = sum(1 for c in cards.values() if c.get("tees"))
     print(f"{len(rounds)} rounds recorded, {rated} courses rated", file=sys.stderr)
 
+    holes = collect_holes()
+    if holes:
+        print(f"{len(holes)} courses with hole maps", file=sys.stderr)
+
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
             .replace("__CONTACTS__", json.dumps(contacts, separators=(",", ":")))
@@ -2158,6 +2480,7 @@ def main() -> int:
             .replace("__ROUNDS__", json.dumps(rounds, separators=(",", ":"), default=str))
             .replace("__CARDS__", json.dumps(cards, separators=(",", ":")))
             .replace("__GOLFERS__", json.dumps(golfers, separators=(",", ":")))
+            .replace("__HOLES__", json.dumps(holes, separators=(",", ":")))
             .replace("__REPO__", repo_slug())
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
