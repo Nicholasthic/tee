@@ -370,7 +370,22 @@ Where a course has no card saved yet, Play shows the par off the hole map
 rather than the generic placeholder — otherwise it would call a 500m hole a
 par 3 — and says so underneath.
 
-The GPS watch is opt-in per round and stops the moment you leave the
+**Battery.** Nothing here holds the GPS open. Play takes a fix, lets it go,
+and takes another: every 4 seconds for half a minute after you touch
+something, every 15 seconds while it sits in your hand, and not at all
+while the phone is in your pocket — a hidden page stops sampling entirely
+and takes a fresh fix the moment you look again.
+
+The screen lock is the bigger drain of the two, so it only holds for about
+two and a half minutes past your last tap and any tap renews it. Pocket the
+phone and it sleeps as it normally would.
+
+The cost of sampling slowly is that the number can be up to 15 seconds old,
+which is 20-odd metres if you are walking. So it says how old it is — *11s
+ago* next to the accuracy — and tapping the number itself takes a fix
+straight away.
+
+The GPS is opt-in per round and stops the moment you leave the
 scorecard — `watchPosition` is the most expensive thing a phone can do in
 your pocket for four hours.
 

@@ -624,7 +624,9 @@ TEMPLATE = """<!doctype html>
   .play .phead .btn{margin-left:auto}
   .play .pyds{text-align:center; padding:14px 0 16px}
   .play .big{font-size:76px; line-height:.9; font-weight:700; letter-spacing:-.045em;
-             color:var(--accent); font-variant-numeric:tabular-nums}
+             color:var(--accent); font-variant-numeric:tabular-nums; cursor:pointer;
+             -webkit-tap-highlight-color:transparent}
+  .play .big:active{opacity:.6}
   .play .big small{font-size:26px; font-weight:600; letter-spacing:-.02em}
   .play .cap{font-size:12.5px; color:var(--dim); margin-top:7px}
   .play .note{font-size:11.5px; color:var(--faint); margin-top:8px; line-height:1.45}
@@ -2118,7 +2120,18 @@ function teeOptions(course){
    The watch is opt-in. Nobody wants a location prompt for opening a
    scorecard, and watchPosition is the single most expensive thing a phone
    can be doing in your pocket for four hours. */
-let gps = { watch: null, pos: null, hole: null, manual: false, err: '' };
+/* watchPosition keeps the GPS lit for as long as it runs, which over four
+   hours is a lot of battery for a number you glance at between shots. So
+   take a fix, let it go, take another a few seconds later: quick while you
+   are using it, slow while it sits in your hand, nothing while the phone is
+   in your pocket. */
+const GPS_QUICK = 4000;                            // just after you touched it
+const GPS_SLOW = 15000;                            // standing about
+const GPS_BUSY_FOR = 30000;                        // how long a touch counts for
+
+let gps = { on: false, timer: null, pos: null, at: 0,
+            hole: null, manual: false, err: '' };
+let touched = 0;
 
 function distM(a, b){
   const R = 6371000, rad = Math.PI / 180;
@@ -2223,40 +2236,51 @@ function nearestHole(holes, at){
 }
 
 function stopGps(){
-  if (gps.watch != null) navigator.geolocation.clearWatch(gps.watch);
-  gps = { watch: null, pos: null, hole: null, manual: false, err: '' };
+  clearTimeout(gps.timer);
+  gps = { on: false, timer: null, pos: null, at: 0,
+          hole: null, manual: false, err: '' };
 }
 
-function startGps(){
-  if (!navigator.geolocation){ gps.err = 'This browser has no location support.'; paintGps(); return; }
-  gps.err = '';
-  gps.watch = navigator.geolocation.watchPosition(p => {
-    gps.pos = p;
-    gps.err = '';
+function gpsLater(){
+  clearTimeout(gps.timer);
+  if (!gps.on || document.visibilityState !== 'visible') return;
+  const gap = Date.now() - touched < GPS_BUSY_FOR ? GPS_QUICK : GPS_SLOW;
+  gps.timer = setTimeout(gpsFix, gap);
+}
+
+function gpsFix(){
+  if (!gps.on) return;
+  navigator.geolocation.getCurrentPosition(p => {
+    gps.pos = p; gps.at = Date.now(); gps.err = '';
     if (!gps.manual){
       const holes = holeMap(sheet && sheet.course);
       if (holes) gps.hole = nearestHole(holes, [p.coords.latitude, p.coords.longitude]);
     }
-    const play = $('s-play');
-  if (play) play.onclick = enterPlay;
-
-  paintPlay();
-  paintGps();
+    paintGps();
+    gpsLater();
   }, e => {
     gps.err = e.code === 1
       ? 'Location is blocked for this page. Allow it in your browser settings.'
       : 'Could not get a fix — ' + (e.message || 'no signal') + '.';
-    const play = $('s-play');
-  if (play) play.onclick = enterPlay;
+    paintGps();
+    gpsLater();
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
 
-  paintPlay();
+function startGps(){
+  if (!navigator.geolocation){ gps.err = 'This browser has no location support.'; paintGps(); return; }
+  gps.on = true; gps.err = ''; touched = Date.now();
+  gpsFix();
   paintGps();
-  }, { enableHighAccuracy: true, maximumAge: 4000, timeout: 25000 });
-  const play = $('s-play');
-  if (play) play.onclick = enterPlay;
+}
 
-  paintPlay();
-  paintGps();
+/* Any tap means you are looking at it: hurry the fixes along, keep the
+   screen awake a while longer, and refresh now if the last one is stale. */
+function nudge(){
+  touched = Date.now();
+  if (playing) keepAwake(true);
+  if (gps.on && Date.now() - gps.at > 2500){ clearTimeout(gps.timer); gpsFix(); }
+  else gpsLater();
 }
 
 /* ---------- playing a hole ----------
@@ -2268,17 +2292,42 @@ let playSlot = 0;                                  // which of the 18 is on scre
 let showArt = true;
 let wake = null;
 
+/* The screen going dark while you stand over the ball is the difference
+   between using this and not. Holding it on for four hours is also the
+   single biggest drain here - more than the GPS - so it only lasts a couple
+   of minutes past the last time you touched anything, and any tap renews
+   it. In your pocket the phone sleeps as it normally would. */
+const WAKE_IDLE = 150000;
+let wakeTimer = null;
+
 async function keepAwake(on){
-  // The screen going dark every 30 seconds for four hours is the difference
-  // between using this and not. Not every browser has it; never mind if so.
+  clearTimeout(wakeTimer);
   try {
-    if (on && !wake && navigator.wakeLock) wake = await navigator.wakeLock.request('screen');
-    else if (!on && wake){ await wake.release(); wake = null; }
+    if (on){
+      if (!wake && navigator.wakeLock && document.visibilityState === 'visible')
+        wake = await navigator.wakeLock.request('screen');
+      wakeTimer = setTimeout(() => keepAwake(false), WAKE_IDLE);
+    } else if (wake){
+      const w = wake; wake = null; await w.release();
+    }
   } catch (e) { wake = null; }
 }
+
+// Hidden means pocketed: stop sampling and let the screen go. Coming back
+// takes a fix straight away rather than waiting out the gap.
 document.addEventListener('visibilitychange', () => {
-  if (wake === null && playing && document.visibilityState === 'visible') keepAwake(true);
+  if (document.visibilityState === 'visible'){
+    if (playing){ touched = Date.now(); keepAwake(true); }
+    if (gps.on){ clearTimeout(gps.timer); gpsFix(); }
+  } else {
+    clearTimeout(gps.timer);
+    clearTimeout(wakeTimer);
+    wake = null;                       // the browser drops it when hidden
+  }
 });
+
+// Anything you tap in here counts as using it.
+document.addEventListener('pointerdown', () => { if (playing) nudge(); }, true);
 
 /* ---------- drawing the hole ----------
    Not a map: no tiles, no third party, nothing fetched. The shapes come out
@@ -2360,6 +2409,12 @@ function drawHole(course, mh, me){
     '</svg>';
 }
 
+function fixAge(){
+  if (!gps.at) return '';
+  const secs = Math.round((Date.now() - gps.at) / 1000);
+  return secs < 4 ? 'just now' : secs + 's ago';
+}
+
 function scoreName(s, pv){
   if (s === 1) return 'ace';
   if (!pv) return s === 1 ? 'stroke' : 'strokes';
@@ -2368,6 +2423,8 @@ function scoreName(s, pv){
          d === 0 ? 'par' : d === 1 ? 'bogey' : d === 2 ? 'double bogey' : (d + ' over');
 }
 
+let ageTimer = null;
+
 function enterPlay(){
   playing = true;
   gps.manual = false;
@@ -2375,14 +2432,21 @@ function enterPlay(){
   playSlot = done < 0 ? 17 : done;                 // pick up where you left off
   // Start it even where there is no map: that is the course you most want
   // to be marking, and pressing Play is already a thing you do at the club.
-  if (gps.watch == null) startGps();
+  if (!gps.on) startGps();
   keepAwake(true);
+  // just the one text node, so the panel is not rebuilt once a second
+  clearInterval(ageTimer);
+  ageTimer = setInterval(() => {
+    const el = $('p-age');
+    if (el) el.textContent = fixAge();
+  }, 1000);
   render();
   window.scrollTo(0, 0);
 }
 
 function leavePlay(){
   playing = false;
+  clearInterval(ageTimer);
   keepAwake(false);
   render();
   // one commit when you come off the course, not one per hole
@@ -2418,10 +2482,10 @@ function paintPlay(){
   let yds;
   if (!holes){
     yds = '<div class="note">Nobody has mapped ' + esc(sheet.course) + '. ' +
-      (gps.watch == null ? 'Turn the GPS on and you can mark it as you play. ' +
+      (!gps.on ? 'Turn the GPS on and you can mark it as you play. ' +
         '<button type="button" id="p-gps">Turn it on</button>'
        : 'Mark the tee and the green as you go and it maps itself.') + '</div>';
-  } else if (gps.watch == null){
+  } else if (!gps.on){
     yds = '<div class="note">GPS is off. ' +
       '<button type="button" id="p-gps">Turn it on</button></div>';
   } else if (gps.err){
@@ -2435,11 +2499,12 @@ function paintPlay(){
     yds = (d == null
         ? '<div class="note">' + (mh && mh.mine ? 'Green not marked yet.'
             : 'No green mapped on this hole.') + '</div>'
-        : '<div class="big">' + d + '<small>m</small></div>' +
+        : '<div class="big" id="p-now">' + d + '<small>m</small></div>' +
           '<div class="cap">to the middle of the green</div>') +
       '<div class="note">' +
       (tee != null && tee > 30 ? tee + 'm from the tee &middot; ' : '') +
       '&plusmn;' + Math.round(gps.pos.coords.accuracy || 0) + 'm' +
+      ' &middot; <span id="p-age">' + fixAge() + '</span>' +
       (mapPar ? ' &middot; par off the map, no card saved yet' : '') +
       (gps.manual ? ' &middot; picked by hand &middot; ' +
         '<button type="button" id="p-auto">follow the GPS</button>' : '') +
@@ -2453,7 +2518,7 @@ function paintPlay(){
 
   // Offer to mark whatever this hole is still missing.
   let mark = '';
-  if (gps.pos && !gps.err && gps.watch != null){
+  if (gps.pos && !gps.err && gps.on){
     const want = [];
     if (!mh || !mh.tee) want.push(['tee', 'the tee']);
     if (!mh || !mh.green) want.push(['green', 'the green']);
@@ -2499,6 +2564,7 @@ function paintPlay(){
   const bind = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
   bind('p-card', leavePlay);
   bind('p-art', () => { showArt = !showArt; paintPlay(); });
+  bind('p-now', nudge);                    // tap the number for a fresh fix
 
   el.querySelectorAll('.marks button').forEach(b => {
     b.onclick = () => {
@@ -2547,7 +2613,7 @@ function paintGps(){
   const holes = holeMap(sheet && sheet.course);
   if (!holes) return;
 
-  const on = gps.watch != null;
+  const on = gps.on;
   el.className = 'gps' + (on && gps.pos && !gps.err ? ' live' : '');
 
   let body = '';
@@ -2596,12 +2662,8 @@ function paintGps(){
       '</div>' : '');
 
   $('g-toggle').onclick = () => {
-    if (gps.watch != null) stopGps(); else startGps();   // live, not the captured state
-    const play = $('s-play');
-  if (play) play.onclick = enterPlay;
-
-  paintPlay();
-  paintGps();
+    if (gps.on) stopGps(); else startGps();   // live, not the captured state
+    paintGps();
   };
   const step = n => { gps.manual = true; gps.hole = (gps.hole || 0) + n; paintGps(); };
   if ($('g-prev')) $('g-prev').onclick = () => step(-1);
@@ -2929,7 +2991,7 @@ function render(){
   renderTabs();
   // Leaving the scorecard behind means nothing is reading the GPS, so drop
   // the watch rather than tracking the phone around in the background.
-  if (!onRounds){ stopGps(); keepAwake(false); playing = false; }
+  if (!onRounds){ stopGps(); clearInterval(ageTimer); keepAwake(false); playing = false; }
   if (onRounds){
     renderRounds();
   } else if (onCourses){
