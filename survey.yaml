@@ -1,0 +1,14 @@
+# Tees and greens marked by hand, standing on them.
+#
+# For the courses OpenStreetMap has never been told about. Press Play, walk
+# up, and mark the tee and the green as you go - two taps a hole and you
+# have a layout nobody had to draw. Written by the app through the same sync
+# as played.yaml and rounds.yaml.
+#
+# These win over anything holes.py pulled for the same hole, on the grounds
+# that you were standing there and a mapper in another country was not.
+#
+# Points are [lat, lon] as the phone reported them. A hole with only a tee
+# marked is fine - it just has no yardage until the green is marked too.
+
+courses: {}

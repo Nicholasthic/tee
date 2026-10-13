@@ -295,6 +295,34 @@ course, so if it dies halfway you just run it again. Committing the result
 also means the app isn't waiting on Overpass while you're standing on a tee
 with one bar of signal.
 
+### Marking a course yourself
+
+Six of the courses we actually play aren't in OpenStreetMap, and you can't
+trace what nobody has drawn. So mark them while you play: press **Play**,
+and on a hole with no tee or green the yardage panel offers to record one.
+Stand on the tee, tap *the tee*; hole out, tap *the green*. Two taps a hole
+and the course has a layout.
+
+Marks work the moment you make them — mark the 3rd green and the 3rd has a
+yardage, no rebuild needed. They go to `survey.yaml` through the same sync
+as `played.yaml` and `rounds.yaml`, committed once when you come off the
+course rather than once per hole. Without sync on, the Rounds tab offers
+the YAML to paste in by hand.
+
+Anything marked wins over OSM for that hole, on the grounds that you were
+standing there and a mapper in another country wasn't. A marked course is
+used however few holes it has, unlike an OSM one — a rule about what a golf
+course should look like shouldn't override you having stood on it.
+
+Marking pins the hole rather than following the GPS, because once a few
+holes are marked the nearest mapped geometry is often the one behind you.
+Step on with the arrows, or tap *follow the GPS* to hand it back.
+
+What this gives you is distances. It does not give you the picture — that
+needs fairway and bunker outlines, which is tracing work in OSM. If you map
+a course there properly, `python3 holes.py --refresh "Course Name"` picks
+it up and you get the drawing too.
+
 What it can't give you:
 
 - **Stroke index.** Almost nobody tags `handicap` in OSM. Still a paper-card job.

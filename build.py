@@ -222,6 +222,38 @@ def dedupe_holes(holes: list[dict]) -> list[dict]:
     return out
 
 
+def collect_survey() -> dict:
+    """Tees and greens marked by hand, from survey.yaml."""
+    sf = ROOT / "survey.yaml"
+    if not sf.exists():
+        return {}
+    rec = (yaml.safe_load(sf.read_text()) or {}).get("courses") or {}
+    out = {}
+    for name, course in rec.items():
+        marks = {}
+        for h in (course.get("holes") or []):
+            n = h.get("hole")
+            if isinstance(n, int) and (h.get("tee") or h.get("green")):
+                marks[n] = {k: h[k] for k in ("tee", "green") if h.get(k)}
+        if marks:
+            out[name] = marks
+    return out
+
+
+def apply_marks(holes: list[dict], marks: dict) -> list[dict]:
+    """Lay hand-marked points over whatever OSM had for the same hole."""
+    rows = {h["hole"]: dict(h) for h in holes if h.get("hole")}
+    for n, m in sorted(marks.items()):
+        r = rows.setdefault(n, {"hole": n})
+        r.update({k: v for k, v in m.items() if v})
+        line = [p for p in (r.get("tee"), r.get("green")) if p]
+        if len(line) == 2:
+            r["line"] = line
+            r["len"] = round(_metres(line[0], line[1]))
+        r["mine"] = True
+    return [rows[k] for k in sorted(rows)]
+
+
 def collect_holes() -> dict:
     """Hole geometry from holes.yaml, for the GPS yardages.
 
@@ -245,9 +277,23 @@ def collect_holes() -> dict:
         return {}
     rec = (yaml.safe_load(hf.read_text()) or {}).get("courses") or {}
 
+    survey = collect_survey()
+
     out, skipped = {}, []
-    for name, course in rec.items():
+    for name in sorted(set(rec) | set(survey)):
+        course = rec.get(name) or {}
         holes = dedupe_holes(course.get("holes") or [])
+        marks = survey.get(name) or {}
+
+        # A club with two courses under one name has its holes numbered twice,
+        # so merging marks by number would throw one of them away.
+        if marks and len({h.get("hole") for h in holes}) != len(holes):
+            print(f"  ! survey.yaml: ignoring marks for {name} - its holes are "
+                  f"numbered more than once", file=sys.stderr)
+            marks = {}
+        if marks:
+            holes = apply_marks(holes, marks)
+
         refs = [h.get("hole") for h in holes]
         greens = sum(1 for h in holes if h.get("green"))
 
@@ -258,7 +304,11 @@ def collect_holes() -> dict:
                 loops = len(holes) // m
                 break
 
-        if not loops:
+        if marks:
+            # You marked these standing on them. However many there are, they
+            # are worth more than a rule about what a golf course looks like.
+            loops, why = 1, ""
+        elif not loops:
             why = f"{len(holes)} holes, numbered " + (
                 ", ".join(str(r) for r in sorted(set(refs), key=lambda x: (x is None, x))) or "nothing")
         elif greens < 0.7 * len(holes):
@@ -269,11 +319,17 @@ def collect_holes() -> dict:
             skipped.append(f"{name} ({why})")
             continue
 
+        at = course.get("at")
+        if not at:
+            pts = [p for h in holes for p in (h.get("tee"), h.get("green")) if p]
+            at = [round(sum(c[0] for c in pts) / len(pts), 6),
+                  round(sum(c[1] for c in pts) / len(pts), 6)] if pts else None
+
         out[name] = {
-            "at": course.get("at"),
+            "at": at,
             "loops": loops,
             "holes": [{k: h[k] for k in ("hole", "par", "tee", "len", "green",
-                                         "line", "art")
+                                         "line", "art", "mine")
                        if h.get(k) is not None} for h in holes],
         }
 
@@ -578,6 +634,12 @@ TEMPLATE = """<!doctype html>
   .play .arttoggle{font:inherit; font-size:11.5px; cursor:pointer; color:var(--dim);
     background:transparent; border:1px solid var(--border2); border-radius:8px;
     padding:4px 10px; margin-left:9px}
+  .play .marks{display:flex; align-items:center; justify-content:center;
+               gap:7px; flex-wrap:wrap; margin-top:10px}
+  .play .marks span{font-size:11.5px; color:var(--faint)}
+  .play .marks button{font:inherit; font-size:12px; cursor:pointer; color:var(--accent);
+    background:var(--accent-bg); border:1px solid var(--accent-line);
+    border-radius:8px; padding:5px 11px}
   .play .pscore{display:flex; align-items:center; gap:12px}
   .play .pscore button{flex:none; width:68px; height:68px; border-radius:50%; cursor:pointer;
     font:inherit; font-size:30px; font-weight:400; color:var(--text);
@@ -1038,6 +1100,7 @@ const ROUNDS = __ROUNDS__;
 const CARDS = __CARDS__;
 const GOLFERS = __GOLFERS__;
 const HOLES = __HOLES__;
+const SURVEY = __SURVEY__;
 const REPO = "__REPO__";
 const BUILT = "__BUILT__";
 
@@ -1776,6 +1839,64 @@ async function pushRounds(){
   render();
 }
 
+function surveyYaml(){
+  const nl = String.fromCharCode(10);
+  const courses = {};
+  [SURVEY, localSurvey].forEach(src => Object.keys(src).forEach(c => {
+    courses[c] = courses[c] || {};
+    Object.keys(src[c]).forEach(n => {
+      courses[c][n] = Object.assign({}, courses[c][n], src[c][n]);
+    });
+  }));
+  const names = Object.keys(courses).sort();
+  if (!names.length) return 'courses: {}';
+  const q = s => /^[A-Za-z][A-Za-z0-9 ()&.-]*$/.test(s) ? s : JSON.stringify(s);
+  const pt = a => '[' + a[0] + ', ' + a[1] + ']';
+  return 'courses:' + nl + names.map(c =>
+    '  ' + q(c) + ':' + nl + '    holes:' + nl +
+    Object.keys(courses[c]).map(Number).sort((a, b) => a - b).map(n => {
+      const m = courses[c][n];
+      return '      - hole: ' + n +
+        (m.tee ? nl + '        tee: ' + pt(m.tee) : '') +
+        (m.green ? nl + '        green: ' + pt(m.green) : '');
+    }).join(nl)
+  ).join(nl);
+}
+
+function serializeSurveyYaml(original){
+  const nl = String.fromCharCode(10);
+  const lines = original.split(nl);
+  let i = lines.length;
+  for (let k = 0; k < lines.length; k++) if (lines[k].startsWith('courses:')){ i = k; break; }
+  return lines.slice(0, i).concat(surveyYaml().split(nl)).join(nl) + nl;
+}
+
+/* Same write path again: re-read for the sha, merge, PUT. */
+async function pushSurvey(){
+  if (!getToken() || !REPO || !surveyCount()) return;
+  sync.state = 'busy'; sync.msg = ''; renderSyncOnly();
+  try {
+    const current = await gh('survey.yaml');
+    const merged = serializeSurveyYaml(b64decode(current.content || ''));
+    await gh('survey.yaml', {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + getToken(),
+                 'Accept': 'application/vnd.github+json',
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'survey: ' + surveyCount() + ' holes marked',
+                             content: b64encode(merged), sha: current.sha }),
+    });
+    Object.keys(localSurvey).forEach(c => {
+      SURVEY[c] = Object.assign({}, SURVEY[c], localSurvey[c]);
+    });
+    localSurvey = {}; saveSurvey(); bumpMap();
+    sync.state = 'ok'; sync.at = Date.now();
+  } catch (e) {
+    sync.state = 'error'; sync.msg = e.message;   // the marks survive locally
+  }
+  render();
+}
+
 /* ---------- course cards ----------
    Course Rating and Slope come off the card in the pro shop. Published
    aggregators disagree with each other, so nothing here is guessed — an
@@ -2007,9 +2128,65 @@ function distM(a, b){
   return Math.sqrt(dx*dx + dy*dy) * R;
 }
 
+/* ---------- marking a course yourself ----------
+   Six of the courses we actually play are not in OpenStreetMap at all. You
+   cannot trace what nobody has drawn, but you are standing on the tee
+   anyway: two taps a hole and the course maps itself.
+
+   Marks live on this device until sync commits them to survey.yaml, and
+   they are merged in here so a green you mark on the 3rd works on the 3rd,
+   not after the next build. */
+let localSurvey = {};
+try { localSurvey = JSON.parse(localStorage.getItem('tee.survey') || '{}'); }
+catch (e) { localSurvey = {}; }
+const saveSurvey = () => {
+  try { localStorage.setItem('tee.survey', JSON.stringify(localSurvey)); } catch (e) {}
+};
+
+function marksFor(course){
+  const out = {};
+  const base = SURVEY[course] || {}, mine = localSurvey[course] || {};
+  Object.keys(base).forEach(k => { out[k] = Object.assign({}, base[k]); });
+  Object.keys(mine).forEach(k => { out[k] = Object.assign({}, out[k], mine[k]); });
+  return out;
+}
+
+function surveyCount(){
+  return Object.keys(localSurvey).reduce(
+    (n, c) => n + Object.keys(localSurvey[c]).length, 0);
+}
+
+let mapCache = { key: null, holes: null };
+const bumpMap = () => { mapCache.key = null; };
+
 function holeMap(course){
-  const m = HOLES[course];
-  return m && m.holes && m.holes.length ? m.holes : null;
+  const base = ((HOLES[course] || {}).holes) || [];
+  const marks = marksFor(course);
+  const key = course + '|' + JSON.stringify(marks);
+  if (mapCache.key === key) return mapCache.holes;
+
+  let rows = base;
+  const nums = Object.keys(marks);
+  // merging by hole number would collapse the two courses of a 36-hole club
+  const twins = new Set(base.map(h => h.hole)).size !== base.length;
+  if (nums.length && !twins){
+    const by = {};
+    rows = base.map(h => { const c = Object.assign({}, h); by[h.hole] = c; return c; });
+    nums.forEach(k => {
+      const n = +k, m = marks[k];
+      let r = by[n];
+      if (!r){ r = { hole: n }; by[n] = r; rows.push(r); }
+      if (m.tee) r.tee = m.tee;
+      if (m.green) r.green = m.green;
+      const line = [r.tee, r.green].filter(Boolean);
+      if (line.length === 2){ r.line = line; r.len = Math.round(distM(line[0], line[1])); }
+      r.mine = true;
+    });
+    rows.sort((a, b) => (a.hole || 99) - (b.hole || 99));
+  }
+
+  mapCache = { key: key, holes: rows.length ? rows : null };
+  return mapCache.holes;
 }
 
 function segM(p, a, b){
@@ -2196,7 +2373,9 @@ function enterPlay(){
   gps.manual = false;
   const done = sheet.strokes.findIndex(x => x == null);
   playSlot = done < 0 ? 17 : done;                 // pick up where you left off
-  if (gps.watch == null && holeMap(sheet.course)) startGps();
+  // Start it even where there is no map: that is the course you most want
+  // to be marking, and pressing Play is already a thing you do at the club.
+  if (gps.watch == null) startGps();
   keepAwake(true);
   render();
   window.scrollTo(0, 0);
@@ -2206,6 +2385,8 @@ function leavePlay(){
   playing = false;
   keepAwake(false);
   render();
+  // one commit when you come off the course, not one per hole
+  if (getToken() && REPO && surveyCount()) pushSurvey();
 }
 
 function paintPlay(){
@@ -2236,8 +2417,10 @@ function paintPlay(){
 
   let yds;
   if (!holes){
-    yds = '<div class="note">No hole map for ' + esc(sheet.course) +
-      ', so no yardages here. Scoring still works.</div>';
+    yds = '<div class="note">Nobody has mapped ' + esc(sheet.course) + '. ' +
+      (gps.watch == null ? 'Turn the GPS on and you can mark it as you play. ' +
+        '<button type="button" id="p-gps">Turn it on</button>'
+       : 'Mark the tee and the green as you go and it maps itself.') + '</div>';
   } else if (gps.watch == null){
     yds = '<div class="note">GPS is off. ' +
       '<button type="button" id="p-gps">Turn it on</button></div>';
@@ -2250,7 +2433,8 @@ function paintPlay(){
     const d = mh && mh.green ? Math.round(distM(at, mh.green)) : null;
     const tee = mh && mh.tee ? Math.round(distM(at, mh.tee)) : null;
     yds = (d == null
-        ? '<div class="note">No green mapped on this hole.</div>'
+        ? '<div class="note">' + (mh && mh.mine ? 'Green not marked yet.'
+            : 'No green mapped on this hole.') + '</div>'
         : '<div class="big">' + d + '<small>m</small></div>' +
           '<div class="cap">to the middle of the green</div>') +
       '<div class="note">' +
@@ -2267,6 +2451,22 @@ function paintPlay(){
   const parSoFar = par.reduce((a, pp, k) => a + (sheet.strokes[k] != null ? (pp || 0) : 0), 0);
   const rel = gross - parSoFar;
 
+  // Offer to mark whatever this hole is still missing.
+  let mark = '';
+  if (gps.pos && !gps.err && gps.watch != null){
+    const want = [];
+    if (!mh || !mh.tee) want.push(['tee', 'the tee']);
+    if (!mh || !mh.green) want.push(['green', 'the green']);
+    const marked = marksFor(sheet.course)[i + 1] || {};
+    if (want.length) mark =
+      '<div class="marks"><span>Standing on it? Mark</span>' +
+      want.map(w => '<button type="button" data-mark="' + w[0] + '">' +
+        w[1] + '</button>').join('') + '</div>';
+    else if (marked.tee || marked.green) mark =
+      '<div class="marks"><span>Marked by you</span>' +
+      '<button type="button" data-unmark="1">undo</button></div>';
+  }
+
   const me = gps.pos && !gps.err
     ? [gps.pos.coords.latitude, gps.pos.coords.longitude] : null;
   const art = showArt ? drawHole(sheet.course, mh, me) : '';
@@ -2280,7 +2480,7 @@ function paintPlay(){
         (showArt ? 'hide' : 'plan') + '</button>' : '') + '</div>' +
       '<button class="btn ghost" type="button" id="p-card">Scorecard</button></div>' +
     art +
-    '<div class="pyds">' + yds + '</div>' +
+    '<div class="pyds">' + yds + mark + '</div>' +
     '<div class="pscore">' +
       '<button type="button" id="p-minus" aria-label="One stroke less">&minus;</button>' +
       '<div class="val"><b>' + (sc == null ? '&mdash;' : sc) + '</b><span>' +
@@ -2299,6 +2499,26 @@ function paintPlay(){
   const bind = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
   bind('p-card', leavePlay);
   bind('p-art', () => { showArt = !showArt; paintPlay(); });
+
+  el.querySelectorAll('.marks button').forEach(b => {
+    b.onclick = () => {
+      const c = sheet.course, n = i + 1;
+      if (b.dataset.unmark){
+        if (localSurvey[c]) delete localSurvey[c][n];
+      } else {
+        if (!gps.pos) return;
+        localSurvey[c] = localSurvey[c] || {};
+        localSurvey[c][n] = Object.assign({}, localSurvey[c][n], {
+          [b.dataset.mark]: [ +gps.pos.coords.latitude.toFixed(6),
+                              +gps.pos.coords.longitude.toFixed(6) ],
+        });
+      }
+      saveSurvey();
+      bumpMap();
+      gps.manual = true;              // do not jump holes the moment it merges
+      paintPlay();
+    };
+  });
   bind('p-gps', () => { startGps(); paintPlay(); });
   bind('p-auto', () => { gps.manual = false; paintPlay(); });
   bind('p-minus', () => {
@@ -2528,6 +2748,11 @@ function renderRounds(){
         ' course card(s) on this device only.</b> Paste into courses.yaml and commit.</span>' +
         '<button type="button" id="c-export">Copy for courses.yaml</button>' +
         '<textarea class="yaml" id="c-yaml" readonly>' + esc(cardsYaml()) + '</textarea></div>' : '') +
+    (surveyCount() && !getToken() ? '<div class="unsaved"><span><b>' + surveyCount() +
+      ' hole(s) marked on this device only.</b> Turn on sync above, or paste ' +
+      'this into survey.yaml and commit.</span>' +
+      '<button type="button" id="s-export">Copy for survey.yaml</button>' +
+      '<textarea class="yaml" id="s-yaml" readonly>' + esc(surveyYaml()) + '</textarea></div>' : '') +
     (drift && !getToken() ? '<div class="unsaved"><span><b>' + drift +
       (drift === 1 ? ' round' : ' rounds') + ' on this device only.</b> ' +
       'Turn on sync above, or paste this into rounds.yaml and commit.</span>' +
@@ -2628,6 +2853,15 @@ function wireRounds(){
     try { navigator.clipboard.writeText(box.value); } catch (e) {
       try { document.execCommand('copy'); } catch (e2) {} }
     cex.textContent = 'Copied';
+  };
+
+  const sx = $('s-export');
+  if (sx) sx.onclick = () => {
+    const box = $('s-yaml');
+    box.select();
+    try { navigator.clipboard.writeText(box.value); } catch (e) {
+      try { document.execCommand('copy'); } catch (e2) {} }
+    sx.textContent = 'Copied';
   };
 
   const ex = $('r-export');
@@ -2779,6 +3013,11 @@ def main() -> int:
     holes = collect_holes()
     if holes:
         print(f"{len(holes)} courses with hole maps", file=sys.stderr)
+    survey = collect_survey()
+    if survey:
+        marked = sum(len(v) for v in survey.values())
+        print(f"{marked} holes marked by hand across {len(survey)} courses",
+              file=sys.stderr)
 
     html = (TEMPLATE
             .replace("__DATA__", json.dumps(records, separators=(",", ":")))
@@ -2789,6 +3028,9 @@ def main() -> int:
             .replace("__CARDS__", json.dumps(cards, separators=(",", ":")))
             .replace("__GOLFERS__", json.dumps(golfers, separators=(",", ":")))
             .replace("__HOLES__", json.dumps(holes, separators=(",", ":")))
+            .replace("__SURVEY__", json.dumps(
+                {c: {str(n): m for n, m in v.items()} for c, v in survey.items()},
+                separators=(",", ":")))
             .replace("__REPO__", repo_slug())
             .replace("__BUILT__", built)
             .replace("__NCLUB__", str(clubs))
