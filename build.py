@@ -1928,6 +1928,30 @@ function siProblems(si){
   return si.map((v, i) => v == null || v < 1 || v > 18 || seen[v] > 1);
 }
 
+/* How long a hole of each par tends to be. The ranges overlap on purpose:
+   a 235m hole is a believable par 3 or a short par 4, and only something
+   well outside is worth calling wrong. */
+const PAR_LEN = { 3: [85, 245], 4: [225, 445], 5: [395, 650] };
+
+function parFits(par, len){
+  const band = PAR_LEN[par];
+  return !band || !len || (len >= band[0] && len <= band[1]);
+}
+
+/* Holes where the tagged par and the mapped length contradict each other.
+   Palmer Colonial's 9th is tagged par 3 and measures 415m, which is a par 4
+   by any reading - and that one tag is the difference between the course
+   adding up to 71 and 72. */
+function parDoubt(course){
+  const holes = holeMap(course) || [];
+  const out = new Array(18).fill(false);
+  holes.forEach(h => {
+    if (h.hole >= 1 && h.hole <= 18 && h.par && h.len && !parFits(h.par, h.len))
+      out[h.hole - 1] = true;
+  });
+  return out;
+}
+
 /* Par off the hole map, but only when OSM has all 18 and they add up to
    something a golf course would actually be. The stroke index is never in
    there - almost nobody tags it - so that still comes off the paper card.
@@ -1948,10 +1972,12 @@ function osmPar(course){
 function renderEditor(){
   if (!editing) return '';
   const bad = siProblems(editing.si);
+  const doubt = parDoubt(editing.course);
   const row = (key, label, vals) =>
     '<div class="nine"><div class="lbl">' + label + '</div><div class="srow">' +
     vals.map((v, i) =>
-      '<div class="h' + (key === 'si' && bad[i] ? ' bad' : '') + '"><span>' + (i+1) + '</span>' +
+      '<div class="h' + ((key === 'si' && bad[i]) || (key === 'par' && doubt[i])
+                         ? ' bad' : '') + '"><span>' + (i+1) + '</span>' +
       '<input type="number" inputmode="numeric" data-k="' + key + '" data-i="' + i + '"' +
       ' value="' + (v == null ? '' : v) + '"></div>').join('') +
     '<div class="h"><span>' + (key === 'par' ? 'TOT' : '') + '</span><span style="padding:5px 0">' +
@@ -1970,6 +1996,11 @@ function renderEditor(){
     row('si', 'Stroke index', editing.si) +
     (dupes ? '<div class="warnrow"><b>Stroke index needs 1 to 18, once each.</b> ' +
              'The flagged holes are blank, out of range or repeated.</div>' : '') +
+    (doubt.some(Boolean) ? '<div class="warnrow"><b>The hole map disagrees with itself.</b> ' +
+      doubt.map((d, i) => d ? i + 1 : 0).filter(Boolean)
+        .map(n => 'hole ' + n).join(' and ') +
+      ' — the par somebody tagged does not match the length they drew. Take ' +
+      'those off the card rather than the map.</div>' : '') +
     '<div class="nine"><div class="lbl">Tees &middot; rating and slope are printed on the card</div>' +
     '<div class="tees">' + editing.tees.map((t, i) =>
       '<div class="teerow">' +
@@ -2475,9 +2506,14 @@ function paintPlay(){
   // The placeholder card would have us call a 500m hole a par 3. Where there
   // is no real card yet, the map's par is the better guess of the two - and
   // the note says where it came from rather than letting you assume.
+  // With no real card saved, the generic par 72 is not this course: it was
+  // calling the 500m 7th at The Glades a par 3. The map's par is a better
+  // guess where it holds up against the length it was drawn at, and where
+  // it doesn't - Palmer Colonial's 415m "par 3" - the honest answer is to
+  // say nothing rather than pick whichever wrong number is nearer to hand.
   const stock = cardFor(sheet.course).stock;
-  const mapPar = stock && mh && mh.par ? mh.par : null;
-  const pv = mapPar || par[i];
+  const mapPar = mh && mh.par && parFits(mh.par, mh.len) ? mh.par : null;
+  const pv = stock ? mapPar : par[i];
 
   let yds;
   if (!holes){
